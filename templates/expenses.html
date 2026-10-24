@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Expenses{% endblock %}
+{% block header_title %}Expense Management{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+
+    <!-- ==================== TOP ACTION BAR & FILTER CONTROLS ==================== -->
+    <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm">
+        <form method="GET" action="{{ url_for('expenses_page') }}" id="filterForm" class="space-y-4">
+            
+            <!-- Row 1: Search & Quick Buttons -->
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <!-- Search Input -->
+                <div class="relative flex-1">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                    <input type="text" name="search" value="{{ filters.search }}" placeholder="Search description, merchant, or notes..." class="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-teal-500 outline-none transition-all placeholder:text-slate-400">
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex items-center space-x-2">
+                    <button type="button" onclick="openAddExpenseModal()" class="flex-1 sm:flex-initial py-2 px-3.5 bg-teal-600 hover:bg-teal-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition-colors flex items-center justify-center space-x-1.5">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>Add Expense</span>
+                    </button>
+
+                    <a href="{{ url_for('export_excel', start_date=filters.start_date, end_date=filters.end_date, category_id=filters.category_id, payment_method=filters.payment_method, search=filters.search) }}" class="py-2 px-3.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 rounded-xl text-xs sm:text-sm font-semibold transition-colors flex items-center space-x-1.5 shadow-sm" title="Export Current Filtered List to Excel">
+                        <i class="fa-solid fa-file-excel text-emerald-600"></i>
+                        <span class="hidden sm:inline">Export Excel</span>
+                    </a>
+
+                    <button type="button" onclick="openImportModal()" class="p-2 sm:px-3 sm:py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 rounded-xl text-xs sm:text-sm font-semibold transition-colors flex items-center space-x-1" title="Import from Excel">
+                        <i class="fa-solid fa-file-import text-teal-600"></i>
+                        <span class="hidden sm:inline">Import</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Row 2: Category, Payment Method, and Date Pickers -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+                <!-- Category Select -->
+                <div>
+                    <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Category</label>
+                    <select name="category_id" onchange="this.form.submit()" class="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-teal-500 outline-none">
+                        <option value="">All Categories</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat.id }}" {% if filters.category_id == cat.id %}selected{% endif %}>
+                            {{ cat.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Payment Method Select -->
+                <div>
+                    <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Payment Method</label>
+                    <select name="payment_method" onchange="this.form.submit()" class="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-teal-500 outline-none">
+                        <option value="">All Payment Methods</option>
+                        <option value="Credit Card" {% if filters.payment_method == 'Credit Card' %}selected{% endif %}>Credit Card</option>
+                        <option value="Debit Card" {% if filters.payment_method == 'Debit Card' %}selected{% endif %}>Debit Card</option>
+                        <option value="UPI / Digital Wallet" {% if filters.payment_method == 'UPI / Digital Wallet' %}selected{% endif %}>UPI / Digital Wallet</option>
+                        <option value="Bank Transfer" {% if filters.payment_method == 'Bank Transfer' %}selected{% endif %}>Bank Transfer</option>
+                        <option value="Cash" {% if filters.payment_method == 'Cash' %}selected{% endif %}>Cash</option>
+                    </select>
+                </div>
+
+                <!-- Start Date -->
+                <div>
+                    <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Start Date</label>
+                    <input type="date" name="start_date" value="{{ filters.start_date }}" onchange="this.form.submit()" class="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-teal-500 outline-none">
+                </div>
+
+                <!-- End Date -->
+                <div>
+                    <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">End Date</label>
+                    <input type="date" name="end_date" value="{{ filters.end_date }}" onchange="this.form.submit()" class="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-teal-500 outline-none">
+                </div>
+            </div>
+
+            <!-- Active Filter Badges & Reset -->
+            {% if filters.search or filters.category_id or filters.payment_method or filters.start_date or filters.end_date %}
+            <div class="flex items-center justify-between pt-1">
+                <span class="text-xs text-slate-500 dark:text-slate-400">
+                    Showing filtered results
+                </span>
+                <a href="{{ url_for('expenses_page') }}" class="text-xs font-semibold text-rose-500 hover:text-rose-600 flex items-center space-x-1">
+                    <i class="fa-solid fa-xmark"></i>
+                    <span>Clear Filters</span>
+                </a>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- ==================== SUMMARY BANNER ==================== -->
+    <div class="bg-gradient-to-r from-teal-700 to-emerald-700 rounded-2xl p-4 sm:p-5 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-md gap-3">
+        <div>
+            <p class="text-xs font-medium text-teal-100 uppercase tracking-wider">Total Filtered Spending</p>
+            <h2 class="text-2xl sm:text-3xl font-extrabold tracking-tight mt-0.5">
+                {{ currency.symbol }}{{ "%.2f"|format(total_amount) }}
+            </h2>
+        </div>
+        <div class="flex items-center space-x-4">
+            <div class="bg-white/10 backdrop-blur-sm px-3.5 py-2 rounded-xl text-right">
+                <span class="text-xs text-teal-100 block">Total Transactions</span>
+                <span class="text-base font-bold">{{ expenses|length }} records</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== EXPENSES LIST ==================== -->
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden">
+        
+        <!-- Desktop & Tablet Table View -->
+        <div class="hidden sm:block overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead>
+                    <tr class="border-b border-slate-100 dark:border-slate-800/80 text-xs font-semibold text-slate-400 uppercase tracking-wider bg-slate-50/50 dark:bg-slate-800/20">
+                        <th class="py-3.5 px-5">Date</th>
+                        <th class="py-3.5 px-5">Category</th>
+                        <th class="py-3.5 px-5">Description</th>
+                        <th class="py-3.5 px-5">Payment Method</th>
+                        <th class="py-3.5 px-5 text-right">Amount ({{ currency.symbol }})</th>
+                        <th class="py-3.5 px-5 text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-800/60">
+                    {% for exp in expenses %}
+                    <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group">
+                        <td class="py-3.5 px-5 text-xs text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">
+                            {{ exp.date }}
+                        </td>
+                        <td class="py-3.5 px-5 whitespace-nowrap">
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium" style="background-color: {{ exp.category_color }}15; color: {{ exp.category_color }};">
+                                <i class="fa-solid fa-{{ exp.category_icon }} mr-1.5 text-[10px]"></i>
+                                {{ exp.category_name }}
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-5">
+                            <p class="font-medium text-slate-800 dark:text-slate-200">{{ exp.description }}</p>
+                            {% if exp.notes %}
+                            <p class="text-xs text-slate-400 mt-0.5">{{ exp.notes }}</p>
+                            {% endif %}
+                        </td>
+                        <td class="py-3.5 px-5 whitespace-nowrap">
+                            <span class="text-xs px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
+                                {{ exp.payment_method }}
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-5 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                            {{ currency.symbol }}{{ "%.2f"|format(exp.amount) }}
+                        </td>
+                        <td class="py-3.5 px-5 text-center whitespace-nowrap">
+                            <div class="inline-flex items-center space-x-1">
+                                <button onclick="editExpense({{ exp.id }})" class="p-1.5 rounded-lg text-slate-400 hover:text-teal-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Edit">
+                                    <i class="fa-solid fa-pen text-xs"></i>
+                                </button>
+                                <button onclick="deleteExpense({{ exp.id }})" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Delete">
+                                    <i class="fa-solid fa-trash text-xs"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="py-12 text-center text-slate-400 text-sm">
+                            <i class="fa-regular fa-folder-open text-4xl mb-3 text-slate-300 dark:text-slate-600 block"></i>
+                            No expenses matched your filter criteria.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Mobile Card View (optimized for mobile phones) -->
+        <div class="sm:hidden divide-y divide-slate-100 dark:divide-slate-800/80">
+            {% for exp in expenses %}
+            <div class="p-4 flex items-center justify-between active:bg-slate-50 dark:active:bg-slate-800/50 transition-colors">
+                <div class="flex items-center space-x-3 min-w-0" onclick="editExpense({{ exp.id }})">
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white flex-shrink-0 shadow-sm" style="background-color: {{ exp.category_color }};">
+                        <i class="fa-solid fa-{{ exp.category_icon }} text-sm"></i>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <p class="font-semibold text-sm text-slate-900 dark:text-white truncate">{{ exp.description }}</p>
+                        <div class="flex items-center space-x-2 text-xs text-slate-400 mt-0.5">
+                            <span>{{ exp.category_name }}</span>
+                            <span>&bull;</span>
+                            <span>{{ exp.date }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-right flex-shrink-0 pl-3 flex flex-col items-end">
+                    <span class="font-bold text-sm text-slate-900 dark:text-white">
+                        {{ currency.symbol }}{{ "%.2f"|format(exp.amount) }}
+                    </span>
+                    <span class="text-[10px] text-slate-400 mb-1">{{ exp.payment_method }}</span>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="editExpense({{ exp.id }})" class="text-slate-400 hover:text-teal-600 p-1">
+                            <i class="fa-solid fa-pen text-xs"></i>
+                        </button>
+                        <button onclick="deleteExpense({{ exp.id }})" class="text-slate-400 hover:text-rose-600 p-1">
+                            <i class="fa-solid fa-trash text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="p-8 text-center text-slate-400 text-xs">
+                No expenses found matching the criteria.
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}

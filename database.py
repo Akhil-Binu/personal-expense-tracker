@@ -1,0 +1,549 @@
+"""
+Database management for Personal Expense Tracker.
+Handles SQLite schema creation, migrations, and CRUD operations.
+"""
+import sqlite3
+import os
+from datetime import datetime, date, timedelta
+from contextlib import contextmanager
+
+DB_NAME = "expenses.db"
+
+def get_db_path():
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_dir, DB_NAME)
+
+@contextmanager
+def get_connection():
+    """Provides a transactional database connection that always closes cleanly."""
+    conn = sqlite3.connect(get_db_path())
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+DEFAULT_CATEGORIES = [
+    {"name": "Food & Dining", "icon": "utensils", "color": "#EF4444", "budget": 500.0},
+    {"name": "Groceries", "icon": "shopping-cart", "color": "#F59E0B", "budget": 450.0},
+    {"name": "Transportation", "icon": "car", "color": "#3B82F6", "budget": 200.0},
+    {"name": "Housing & Utilities", "icon": "bolt", "color": "#6366F1", "budget": 600.0},
+    {"name": "Entertainment", "icon": "film", "color": "#8B5CF6", "budget": 150.0},
+    {"name": "Shopping", "icon": "bag-shopping", "color": "#EC4899", "budget": 300.0},
+    {"name": "Health & Medical", "icon": "heart-pulse", "color": "#10B981", "budget": 150.0},
+    {"name": "Travel", "icon": "plane", "color": "#06B6D4", "budget": 250.0},
+    {"name": "Education", "icon": "book", "color": "#14B8A6", "budget": 100.0},
+    {"name": "Personal Care", "icon": "sparkles", "color": "#F97316", "budget": 100.0},
+    {"name": "Others", "icon": "box-archive", "color": "#6B7280", "budget": 100.0},
+]
+
+def init_db(seed_sample_data=True):
+    """Initializes tables and optionally seeds default categories and initial transactions."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        
+        # Categories table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                icon TEXT NOT NULL DEFAULT 'tag',
+                color TEXT NOT NULL DEFAULT '#3B82F6',
+                monthly_budget REAL NOT NULL DEFAULT 0.0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Expenses table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS expenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                category_id INTEGER NOT NULL,
+                amount REAL NOT NULL CHECK(amount > 0),
+                payment_method TEXT NOT NULL,
+                description TEXT NOT NULL,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT
+            )
+        """)
+        
+        # Settings table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+        
+        # Default currency setting
+        cursor.execute("SELECT value FROM settings WHERE key = 'currency_code'")
+        if not cursor.fetchone():
+            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('currency_code', 'USD')")
+            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('currency_symbol', '$')")
+
+        # Create indexes for fast querying by date and category
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category_id)")
+        
+        # Seed categories if none exist
+        cursor.execute("SELECT COUNT(*) FROM categories")
+        if cursor.fetchone()[0] == 0:
+            for cat in DEFAULT_CATEGORIES:
+                cursor.execute("""
+                    INSERT INTO categories (name, icon, color, monthly_budget)
+                    VALUES (?, ?, ?, ?)
+                """, (cat["name"], cat["icon"], cat["color"], cat["budget"]))
+        
+        # Seed sample expenses if none exist
+        cursor.execute("SELECT COUNT(*) FROM expenses")
+        if cursor.fetchone()[0] == 0 and seed_sample_data:
+            _seed_sample_expenses(conn)
+            
+        conn.commit()
+
+def _seed_sample_expenses(conn):
+    """Populates realistic historical and current month expenses for instant demonstration."""
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name FROM categories")
+    cat_map = {row["name"]: row["id"] for row in cursor.fetchall()}
+    
+    today = date.today()
+    sample_records = [
+        # Current month
+        (0, "Groceries", 64.50, "Credit Card", "Weekly supermarket run", "Fresh produce & pantry"),
+        (1, "Food & Dining", 24.00, "Debit Card", "Lunch with colleagues", "Burrito bowl"),
+        (1, "Transportation", 15.00, "UPI / Digital Wallet", "Metro recharge", "Commute card refill"),
+        (2, "Housing & Utilities", 85.20, "Bank Transfer", "Electricity bill", "Monthly utility payment"),
+        (3, "Food & Dining", 12.50, "Cash", "Morning specialty coffee & pastry", "Local cafe"),
+        (4, "Shopping", 49.99, "Credit Card", "Wireless ergonomic mouse", "Home office accessory"),
+        (5, "Entertainment", 16.99, "Credit Card", "Streaming subscription", "Family plan"),
+        (6, "Health & Medical", 35.00, "Debit Card", "Pharmacy vitamins & medicines", "Health supplements"),
+        (7, "Food & Dining", 42.80, "Credit Card", "Dinner at Italian bistro", "Pasta & dessert"),
+        (8, "Groceries", 78.40, "Credit Card", "Organic grocery haul", "Whole foods & dairy"),
+        (9, "Transportation", 32.50, "Credit Card", "Gas station fill-up", "Half tank fuel"),
+        (10, "Personal Care", 25.00, "Cash", "Barber haircut", "Monthly grooming"),
+        (11, "Food & Dining", 18.75, "UPI / Digital Wallet", "Fast casual lunch", "Salad bar"),
+        (12, "Education", 29.00, "Credit Card", "Online programming book", "Python guide"),
+        (13, "Travel", 120.00, "Credit Card", "Weekend train ticket", "Intercity travel booking"),
+        (14, "Others", 19.50, "Cash", "Postal shipping & packaging", "Parcel dispatch"),
+        
+        # Previous month data for comparative charts
+        (32, "Groceries", 95.00, "Credit Card", "Large monthly grocery haul", ""),
+        (33, "Housing & Utilities", 110.00, "Bank Transfer", "Water and gas utilities", ""),
+        (35, "Food & Dining", 55.00, "Credit Card", "Weekend dinner", "Steakhouse"),
+        (38, "Transportation", 45.00, "Debit Card", "Gas station", ""),
+        (40, "Entertainment", 60.00, "Credit Card", "Concert tickets", ""),
+        (45, "Shopping", 120.00, "Credit Card", "Winter jacket", "Seasonal discount"),
+        (48, "Health & Medical", 40.00, "Cash", "Dental checkup co-pay", ""),
+    ]
+    
+    for days_ago, cat_name, amount, payment, desc, notes in sample_records:
+        if cat_name in cat_map:
+            expense_date = (today - timedelta(days=days_ago)).isoformat()
+            cursor.execute("""
+                INSERT INTO expenses (date, category_id, amount, payment_method, description, notes)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (expense_date, cat_map[cat_name], amount, payment, desc, notes))
+
+def get_setting(key, default=None):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        return row["value"] if row else default
+
+def set_setting(key, value):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
+
+def get_currency():
+    return {
+        "code": get_setting("currency_code", "USD"),
+        "symbol": get_setting("currency_symbol", "$")
+    }
+
+def set_currency(code, symbol):
+    set_setting("currency_code", code)
+    set_setting("currency_symbol", symbol)
+
+# ==================== Category Operations ====================
+
+def get_categories():
+    """Returns all categories with their budget and current month spend."""
+    current_month = date.today().strftime("%Y-%m")
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT c.*, 
+                   COALESCE(SUM(e.amount), 0) AS current_month_spent,
+                   COUNT(e.id) AS total_expense_count
+            FROM categories c
+            LEFT JOIN expenses e ON c.id = e.category_id AND strftime('%Y-%m', e.date) = ?
+            GROUP BY c.id
+            ORDER BY c.name ASC
+        """, (current_month,))
+        return [dict(row) for row in cursor.fetchall()]
+
+def get_category_by_id(cat_id):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM categories WHERE id = ?", (cat_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def add_category(name, icon, color, monthly_budget):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO categories (name, icon, color, monthly_budget)
+            VALUES (?, ?, ?, ?)
+        """, (name.strip(), icon.strip(), color.strip(), float(monthly_budget or 0.0)))
+        conn.commit()
+        return cursor.lastrowid
+
+def update_category(cat_id, name, icon, color, monthly_budget):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE categories 
+            SET name = ?, icon = ?, color = ?, monthly_budget = ?
+            WHERE id = ?
+        """, (name.strip(), icon.strip(), color.strip(), float(monthly_budget or 0.0), cat_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def delete_category(cat_id):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        # Check if expenses exist for this category
+        cursor.execute("SELECT COUNT(*) FROM expenses WHERE category_id = ?", (cat_id,))
+        if cursor.fetchone()[0] > 0:
+            raise ValueError("Cannot delete category with associated expenses. Please reassign or delete them first.")
+        cursor.execute("DELETE FROM categories WHERE id = ?", (cat_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+# ==================== Expense Operations ====================
+
+def add_expense(expense_date, category_id, amount, payment_method, description, notes=""):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO expenses (date, category_id, amount, payment_method, description, notes)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (expense_date, int(category_id), float(amount), payment_method.strip(), description.strip(), (notes or "").strip()))
+        conn.commit()
+        return cursor.lastrowid
+
+def update_expense(expense_id, expense_date, category_id, amount, payment_method, description, notes=""):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE expenses
+            SET date = ?, category_id = ?, amount = ?, payment_method = ?, description = ?, notes = ?
+            WHERE id = ?
+        """, (expense_date, int(category_id), float(amount), payment_method.strip(), description.strip(), (notes or "").strip(), expense_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def delete_expense(expense_id):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def get_expense_by_id(expense_id):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color
+            FROM expenses e
+            JOIN categories c ON e.category_id = c.id
+            WHERE e.id = ?
+        """, (expense_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def get_expenses(start_date=None, end_date=None, category_id=None, payment_method=None, search=None, limit=None, offset=0):
+    """Filtered list of expenses with joined category info."""
+    conditions = []
+    params = []
+    
+    if start_date:
+        conditions.append("e.date >= ?")
+        params.append(start_date)
+    if end_date:
+        conditions.append("e.date <= ?")
+        params.append(end_date)
+    if category_id:
+        conditions.append("e.category_id = ?")
+        params.append(category_id)
+    if payment_method:
+        conditions.append("e.payment_method = ?")
+        params.append(payment_method)
+    if search:
+        conditions.append("(e.description LIKE ? OR e.notes LIKE ?)")
+        search_param = f"%{search}%"
+        params.extend([search_param, search_param])
+        
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    
+    query = f"""
+        SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color
+        FROM expenses e
+        JOIN categories c ON e.category_id = c.id
+        {where_clause}
+        ORDER BY e.date DESC, e.id DESC
+    """
+    
+    if limit is not None:
+        query += " LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        return [dict(row) for row in cursor.fetchall()]
+
+def count_expenses(start_date=None, end_date=None, category_id=None, payment_method=None, search=None):
+    conditions = []
+    params = []
+    if start_date:
+        conditions.append("date >= ?")
+        params.append(start_date)
+    if end_date:
+        conditions.append("date <= ?")
+        params.append(end_date)
+    if category_id:
+        conditions.append("category_id = ?")
+        params.append(category_id)
+    if payment_method:
+        conditions.append("payment_method = ?")
+        params.append(payment_method)
+    if search:
+        conditions.append("(description LIKE ? OR notes LIKE ?)")
+        search_param = f"%{search}%"
+        params.extend([search_param, search_param])
+        
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    query = f"SELECT COUNT(*) FROM expenses {where_clause}"
+    
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        return cursor.fetchone()[0]
+
+# ==================== Reporting & Analytics Operations ====================
+
+def get_monthly_metrics(month_str=None):
+    """
+    month_str: 'YYYY-MM'. Defaults to current month.
+    Returns:
+      - total_spend
+      - prev_month_spend
+      - total_budget
+      - top_category
+      - largest_expense
+      - expense_count
+      - daily_average
+    """
+    if not month_str:
+        month_str = date.today().strftime("%Y-%m")
+        
+    year, month = map(int, month_str.split("-"))
+    # Compute previous month
+    if month == 1:
+        prev_month_str = f"{year - 1}-12"
+    else:
+        prev_month_str = f"{year:04d}-{month - 1:02d}"
+        
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        
+        # Current month total and count
+        cursor.execute("""
+            SELECT COALESCE(SUM(amount), 0) as total,
+                   COUNT(id) as count,
+                   COALESCE(MAX(amount), 0) as max_expense
+            FROM expenses
+            WHERE strftime('%Y-%m', date) = ?
+        """, (month_str,))
+        cur_row = cursor.fetchone()
+        total_spend = cur_row["total"]
+        expense_count = cur_row["count"]
+        largest_expense = cur_row["max_expense"]
+        
+        # Previous month total
+        cursor.execute("""
+            SELECT COALESCE(SUM(amount), 0) as total
+            FROM expenses
+            WHERE strftime('%Y-%m', date) = ?
+        """, (prev_month_str,))
+        prev_month_spend = cursor.fetchone()["total"]
+        
+        # Total Monthly Budget
+        cursor.execute("SELECT COALESCE(SUM(monthly_budget), 0) as total_budget FROM categories")
+        total_budget = cursor.fetchone()["total_budget"]
+        
+        # Top Category this month
+        cursor.execute("""
+            SELECT c.name, SUM(e.amount) as cat_spend
+            FROM expenses e
+            JOIN categories c ON e.category_id = c.id
+            WHERE strftime('%Y-%m', e.date) = ?
+            GROUP BY c.id
+            ORDER BY cat_spend DESC
+            LIMIT 1
+        """, (month_str,))
+        top_cat_row = cursor.fetchone()
+        top_category = top_cat_row["name"] if top_cat_row else "None"
+        
+        # Days in month passed or total days
+        today = date.today()
+        if today.strftime("%Y-%m") == month_str:
+            days_counted = max(1, today.day)
+        else:
+            # Full month days
+            import calendar
+            days_counted = calendar.monthrange(year, month)[1]
+            
+        daily_average = total_spend / days_counted if days_counted > 0 else 0.0
+        
+        return {
+            "month": month_str,
+            "prev_month": prev_month_str,
+            "total_spend": round(total_spend, 2),
+            "prev_month_spend": round(prev_month_spend, 2),
+            "total_budget": round(total_budget, 2),
+            "top_category": top_category,
+            "largest_expense": round(largest_expense, 2),
+            "expense_count": expense_count,
+            "daily_average": round(daily_average, 2),
+        }
+
+def get_category_breakdown(month_str=None):
+    """Returns spending per category for a given month with budget status."""
+    if not month_str:
+        month_str = date.today().strftime("%Y-%m")
+        
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT c.id, c.name, c.icon, c.color, c.monthly_budget,
+                   COALESCE(SUM(e.amount), 0) as spent,
+                   COUNT(e.id) as transaction_count
+            FROM categories c
+            LEFT JOIN expenses e ON c.id = e.category_id AND strftime('%Y-%m', e.date) = ?
+            GROUP BY c.id
+            ORDER BY spent DESC, c.name ASC
+        """, (month_str,))
+        rows = [dict(r) for r in cursor.fetchall()]
+        
+        total_spent = sum(r["spent"] for r in rows)
+        for r in rows:
+            r["spent"] = round(r["spent"], 2)
+            r["percentage_of_total"] = round((r["spent"] / total_spent * 100), 1) if total_spent > 0 else 0.0
+            r["budget_utilization"] = round((r["spent"] / r["monthly_budget"] * 100), 1) if r["monthly_budget"] > 0 else 0.0
+            r["remaining_budget"] = round(r["monthly_budget"] - r["spent"], 2)
+        return rows
+
+def get_daily_spending_trend(month_str=None):
+    """Returns day-by-day spending for a specific month."""
+    if not month_str:
+        month_str = date.today().strftime("%Y-%m")
+        
+    year, month = map(int, month_str.split("-"))
+    import calendar
+    _, num_days = calendar.monthrange(year, month)
+    
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT strftime('%d', date) as day, SUM(amount) as total
+            FROM expenses
+            WHERE strftime('%Y-%m', date) = ?
+            GROUP BY day
+            ORDER BY day ASC
+        """, (month_str,))
+        spending_by_day = {int(row["day"]): row["total"] for row in cursor.fetchall()}
+        
+        labels = [f"{day:02d}" for day in range(1, num_days + 1)]
+        values = [round(spending_by_day.get(day, 0.0), 2) for day in range(1, num_days + 1)]
+        
+        return {
+            "labels": labels,
+            "values": values,
+            "month": month_str
+        }
+
+def get_monthly_history(num_months=6):
+    """Returns total spending for the last N months."""
+    today = date.today()
+    months = []
+    
+    # Generate list of past N months
+    for i in range(num_months - 1, -1, -1):
+        year = today.year
+        month = today.month - i
+        while month <= 0:
+            month += 12
+            year -= 1
+        months.append(f"{year:04d}-{month:02d}")
+        
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        results = []
+        for m in months:
+            cursor.execute("""
+                SELECT COALESCE(SUM(amount), 0) as total
+                FROM expenses
+                WHERE strftime('%Y-%m', date) = ?
+            """, (m,))
+            total = cursor.fetchone()["total"]
+            
+            # Format label, e.g. "Oct 2026"
+            dt = datetime.strptime(m, "%Y-%m")
+            label = dt.strftime("%b %Y")
+            results.append({
+                "month_code": m,
+                "label": label,
+                "total": round(total, 2)
+            })
+            
+        return results
+
+def get_payment_method_breakdown(month_str=None):
+    """Returns spending grouped by payment method for a month."""
+    if not month_str:
+        month_str = date.today().strftime("%Y-%m")
+        
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT payment_method, SUM(amount) as total, COUNT(id) as count
+            FROM expenses
+            WHERE strftime('%Y-%m', date) = ?
+            GROUP BY payment_method
+            ORDER BY total DESC
+        """, (month_str,))
+        return [dict(r) for r in cursor.fetchall()]
+
+def get_available_months():
+    """Returns distinct list of YYYY-MM months that have expenses."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT strftime('%Y-%m', date) as m FROM expenses ORDER BY m DESC")
+        months = [r["m"] for r in cursor.fetchall() if r["m"]]
+        current = date.today().strftime("%Y-%m")
+        if current not in months:
+            months.insert(0, current)
+        return months

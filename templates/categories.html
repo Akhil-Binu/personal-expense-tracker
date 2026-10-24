@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Categories & Budgets{% endblock %}
+{% block header_title %}Category & Budget Management{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- ==================== TOP BUDGET OVERVIEW BANNER ==================== -->
+    <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+            <h2 class="text-xl font-bold text-slate-900 dark:text-white">Monthly Budgets & Categories</h2>
+            <p class="text-xs sm:text-sm text-slate-400 mt-0.5">Define spending limits per category to keep your finances disciplined</p>
+        </div>
+
+        <button onclick="openAddCategoryModal()" class="py-2.5 px-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold text-sm rounded-xl shadow-md shadow-teal-600/20 transition-all flex items-center space-x-2">
+            <i class="fa-solid fa-plus"></i>
+            <span>New Category</span>
+        </button>
+    </div>
+
+    <!-- ==================== BUDGET KPI METRICS ==================== -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm">
+            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Total Monthly Budget</span>
+            <span class="text-2xl font-extrabold text-slate-900 dark:text-white">{{ currency.symbol }}{{ "%.2f"|format(total_budget) }}</span>
+            <p class="text-xs text-slate-400 mt-1">Across {{ categories|length }} active categories</p>
+        </div>
+
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm">
+            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Current Month Spent</span>
+            <span class="text-2xl font-extrabold text-teal-600 dark:text-teal-400">{{ currency.symbol }}{{ "%.2f"|format(total_spent) }}</span>
+            {% set total_util = (total_spent / total_budget * 100) if total_budget > 0 else 0 %}
+            <p class="text-xs text-slate-400 mt-1">{{ "%.1f"|format(total_util) }}% of total budget consumed</p>
+        </div>
+
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm">
+            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Remaining Monthly Buffer</span>
+            {% set rem_total = total_budget - total_spent %}
+            <span class="text-2xl font-extrabold {% if rem_total >= 0 %}text-emerald-500{% else %}text-rose-500{% endif %}">
+                {{ currency.symbol }}{{ "%.2f"|format(rem_total) }}
+            </span>
+            <p class="text-xs text-slate-400 mt-1">{% if rem_total >= 0 %}Under total budget{% else %}Exceeded allocated budget{% endif %}</p>
+        </div>
+    </div>
+
+    <!-- ==================== CATEGORIES GRID / CARDS ==================== -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+        {% for cat in categories %}
+        {% set util = (cat.current_month_spent / cat.monthly_budget * 100) if cat.monthly_budget > 0 else 0 %}
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
+            
+            <!-- Category Header -->
+            <div>
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm" style="background-color: {{ cat.color }};">
+                            <i class="fa-solid fa-{{ cat.icon }} text-base"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-slate-800 dark:text-slate-100">{{ cat.name }}</h4>
+                            <span class="text-xs text-slate-400">{{ cat.total_expense_count }} recorded expenses</span>
+                        </div>
+                    </div>
+
+                    <!-- Category Action Buttons -->
+                    <div class="flex items-center space-x-1">
+                        <button onclick='editCategory({{ cat|tojson }})' class="p-1.5 rounded-lg text-slate-400 hover:text-teal-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Edit Category">
+                            <i class="fa-solid fa-pen text-xs"></i>
+                        </button>
+                        {% if cat.total_expense_count == 0 %}
+                        <button onclick="deleteCategory({{ cat.id }}, '{{ cat.name }}')" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Delete Category">
+                            <i class="fa-solid fa-trash text-xs"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Spend & Budget Numbers -->
+                <div class="flex items-baseline justify-between mt-4">
+                    <div>
+                        <span class="text-xs text-slate-400 block">Spent This Month</span>
+                        <span class="text-lg font-bold text-slate-900 dark:text-white">{{ currency.symbol }}{{ "%.2f"|format(cat.current_month_spent) }}</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs text-slate-400 block">Monthly Limit</span>
+                        <span class="text-sm font-semibold text-slate-600 dark:text-slate-400">{{ currency.symbol }}{{ "%.2f"|format(cat.monthly_budget) }}</span>
+                    </div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="mt-3">
+                    <div class="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div class="h-full rounded-full {% if util > 100 %}bg-rose-500{% elif util > 80 %}bg-amber-500{% else %}bg-teal-500{% endif %}" style="width: {{ [util, 100]|min }}%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Status -->
+            <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                {% if util > 100 %}
+                <span class="font-semibold text-rose-500 flex items-center">
+                    <i class="fa-solid fa-triangle-exclamation mr-1"></i>Over Budget ({{ "%.0f"|format(util) }}%)
+                </span>
+                {% elif util > 80 %}
+                <span class="font-semibold text-amber-500 flex items-center">
+                    <i class="fa-solid fa-circle-exclamation mr-1"></i>Near Limit ({{ "%.0f"|format(util) }}%)
+                </span>
+                {% else %}
+                <span class="font-semibold text-emerald-500 flex items-center">
+                    <i class="fa-solid fa-circle-check mr-1"></i>On Track ({{ "%.0f"|format(util) }}%)
+                </span>
+                {% endif %}
+
+                <span class="text-slate-400">
+                    {% set rem = cat.monthly_budget - cat.current_month_spent %}
+                    {% if rem >= 0 %}{{ currency.symbol }}{{ "%.2f"|format(rem) }} left{% else %}{{ currency.symbol }}{{ "%.2f"|format(-rem) }} over{% endif %}
+                </span>
+            </div>
+
+        </div>
+        {% endfor %}
+    </div>
+
+</div>
+
+<!-- ==================== MODAL: ADD / EDIT CATEGORY ==================== -->
+<div id="categoryModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-slate-900/60 backdrop-blur-sm transition-opacity flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden transform transition-all">
+        <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <h3 id="catModalTitle" class="text-base font-bold text-slate-800 dark:text-slate-100">Add New Category</h3>
+            <button type="button" onclick="closeCategoryModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+
+        <form id="categoryForm" onsubmit="handleCategorySubmit(event)" class="p-6 space-y-4">
+            <input type="hidden" id="categoryId" name="cat_id" value="">
+
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Category Name</label>
+                <input type="text" id="catName" name="name" required placeholder="e.g. Subscriptions, Fitness, Pets" class="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 outline-none">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Monthly Budget Target ({{ currency.symbol }})</label>
+                <div class="relative">
+                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">{{ currency.symbol }}</span>
+                    <input type="number" step="10" min="0" id="catBudget" name="monthly_budget" required placeholder="300.00" class="w-full pl-8 pr-4 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 outline-none">
+                </div>
+            </div>
+
+            <!-- Icon Selector -->
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Icon</label>
+                <div class="grid grid-cols-6 gap-2" id="iconPicker">
+                    <!-- Populated by JS -->
+                </div>
+                <input type="hidden" id="catIcon" name="icon" value="tag">
+            </div>
+
+            <!-- Color Palette Selector -->
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Theme Color</label>
+                <div class="flex items-center space-x-2.5" id="colorPicker">
+                    <!-- Populated by JS -->
+                </div>
+                <input type="hidden" id="catColor" name="color" value="#3B82F6">
+            </div>
+
+            <div class="pt-2">
+                <button type="submit" id="saveCatBtn" class="w-full py-2.5 px-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-xl shadow-md transition-all flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-check"></i>
+                    <span id="saveCatBtnText">Save Category</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

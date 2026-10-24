@@ -1,0 +1,63 @@
+/* Custom Responsive Styles for Personal Expense Tracker */
+
+/* Custom Smooth Scrolling & Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.4);
+    border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.7);
+}
+
+/* Touch enhancements for mobile web */
+* {
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Modal animations */
+#expenseModal, #importModal, #categoryModal {
+    transition: opacity 0.25s ease-in-out;
+}
+
+/* Toast Notification Animation */
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.toast-enter {
+    animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Icon picker buttons */
+.icon-option, .color-option {
+    transition: all 0.15s ease-in-out;
+}
+.icon-option.active, .color-option.active {
+    transform: scale(1.12);
+    ring-width: 2px;
+}
+
+/* Table Responsive Styles */
+@media (max-width: 640px) {
+    input, select, textarea {
+        font-size: 16px !important; /* Prevents auto-zoom on iOS Safari */
+    }
+}

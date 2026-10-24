@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+{% block header_title %}Financial Overview{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- ==================== TOP KPI CARDS ==================== -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
+        <!-- 1. Total Spent Card -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Spent</span>
+                <div class="w-8 h-8 rounded-xl bg-teal-50 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400 flex items-center justify-center text-sm">
+                    <i class="fa-solid fa-credit-card"></i>
+                </div>
+            </div>
+            <div class="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+                {{ currency.symbol }}{{ "%.2f"|format(metrics.total_spend) }}
+            </div>
+            <div class="mt-2 flex items-center text-xs">
+                {% if metrics.prev_month_spend > 0 %}
+                    {% set diff = metrics.total_spend - metrics.prev_month_spend %}
+                    {% set pct = (diff / metrics.prev_month_spend * 100)|abs %}
+                    {% if diff > 0 %}
+                        <span class="text-rose-500 font-semibold flex items-center mr-1.5">
+                            <i class="fa-solid fa-arrow-trend-up mr-1"></i>+{{ "%.1f"|format(pct) }}%
+                        </span>
+                    {% else %}
+                        <span class="text-emerald-500 font-semibold flex items-center mr-1.5">
+                            <i class="fa-solid fa-arrow-trend-down mr-1"></i>-{{ "%.1f"|format(pct) }}%
+                        </span>
+                    {% endif %}
+                    <span class="text-slate-400 truncate">vs last month ({{ currency.symbol }}{{ "%.2f"|format(metrics.prev_month_spend) }})</span>
+                {% else %}
+                    <span class="text-slate-400">{{ metrics.expense_count }} transactions</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 2. Budget Health Card -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Monthly Budget</span>
+                <div class="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm">
+                    <i class="fa-solid fa-piggy-bank"></i>
+                </div>
+            </div>
+            <div class="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+                {{ currency.symbol }}{{ "%.2f"|format(metrics.total_budget) }}
+            </div>
+            {% set rem_budget = metrics.total_budget - metrics.total_spend %}
+            {% set budget_pct = (metrics.total_spend / metrics.total_budget * 100) if metrics.total_budget > 0 else 0 %}
+            <div class="mt-2.5">
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="{% if rem_budget >= 0 %}text-emerald-600 dark:text-emerald-400{% else %}text-rose-600 dark:text-rose-400{% endif %} font-medium">
+                        {% if rem_budget >= 0 %}{{ currency.symbol }}{{ "%.2f"|format(rem_budget) }} left{% else %}{{ currency.symbol }}{{ "%.2f"|format(-rem_budget) }} over{% endif %}
+                    </span>
+                    <span class="text-slate-400 font-medium">{{ "%.0f"|format(budget_pct) }}%</span>
+                </div>
+                <div class="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div class="h-full rounded-full {% if budget_pct > 100 %}bg-rose-500{% elif budget_pct > 80 %}bg-amber-500{% else %}bg-teal-500{% endif %}" style="width: {{ [budget_pct, 100]|min }}%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Daily Average Card -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Daily Average</span>
+                <div class="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center text-sm">
+                    <i class="fa-solid fa-chart-line"></i>
+                </div>
+            </div>
+            <div class="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+                {{ currency.symbol }}{{ "%.2f"|format(metrics.daily_average) }}
+            </div>
+            <div class="mt-2 text-xs text-slate-400">
+                <span>Calculated across active days</span>
+            </div>
+        </div>
+
+        <!-- 4. Top Category Card -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Top Spending</span>
+                <div class="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center text-sm">
+                    <i class="fa-solid fa-fire"></i>
+                </div>
+            </div>
+            <div class="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white truncate">
+                {{ metrics.top_category }}
+            </div>
+            <div class="mt-2 text-xs text-slate-400 flex items-center justify-between">
+                <span>Max Single: {{ currency.symbol }}{{ "%.2f"|format(metrics.largest_expense) }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== CHARTS ROW ==================== -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Daily Spending Trend (2 cols on desktop) -->
+        <div class="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="font-bold text-slate-800 dark:text-slate-100">Daily Spending Trend</h3>
+                    <p class="text-xs text-slate-400">Day-by-day expenditure pattern for {{ selected_month }}</p>
+                </div>
+                <span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400">
+                    {{ selected_month }}
+                </span>
+            </div>
+            <div class="relative flex-1 min-h-[260px] sm:min-h-[290px] w-full">
+                <canvas id="dailyTrendChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Category Doughnut Breakdown (1 col on desktop) -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="font-bold text-slate-800 dark:text-slate-100">Category Share</h3>
+                    <p class="text-xs text-slate-400">Spending by category</p>
+                </div>
+                <a href="{{ url_for('categories_page') }}" class="text-xs font-semibold text-teal-600 hover:text-teal-700 dark:text-teal-400">Budgets &rarr;</a>
+            </div>
+            <div class="relative flex-1 min-h-[240px] flex items-center justify-center">
+                <canvas id="categoryDonutChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== RECENT TRANSACTIONS SECTION ==================== -->
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <div class="flex items-center space-x-2.5">
+                <div class="w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center text-sm">
+                    <i class="fa-solid fa-clock-rotate-left"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-slate-800 dark:text-slate-100">Recent Transactions</h3>
+                    <p class="text-xs text-slate-400">Your latest logged expenses</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button onclick="openAddExpenseModal()" class="hidden sm:inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-teal-600 hover:bg-teal-700 text-white shadow-sm transition-colors">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>Add Expense</span>
+                </button>
+                <a href="{{ url_for('expenses_page') }}" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors">
+                    View All &rarr;
+                </a>
+            </div>
+        </div>
+
+        <!-- Desktop & Tablet Table View -->
+        <div class="hidden sm:block overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead>
+                    <tr class="border-b border-slate-100 dark:border-slate-800/80 text-xs font-semibold text-slate-400 uppercase tracking-wider bg-slate-50/50 dark:bg-slate-800/20">
+                        <th class="py-3 px-5">Date</th>
+                        <th class="py-3 px-5">Category</th>
+                        <th class="py-3 px-5">Description</th>
+                        <th class="py-3 px-5">Payment</th>
+                        <th class="py-3 px-5 text-right">Amount</th>
+                        <th class="py-3 px-5 text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-800/60">
+                    {% for exp in recent_expenses %}
+                    <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group">
+                        <td class="py-3.5 px-5 text-xs text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">
+                            {{ exp.date }}
+                        </td>
+                        <td class="py-3.5 px-5 whitespace-nowrap">
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium" style="background-color: {{ exp.category_color }}15; color: {{ exp.category_color }};">
+                                <i class="fa-solid fa-{{ exp.category_icon }} mr-1.5 text-[10px]"></i>
+                                {{ exp.category_name }}
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-5">
+                            <p class="font-medium text-slate-800 dark:text-slate-200 truncate max-w-xs">{{ exp.description }}</p>
+                            {% if exp.notes %}
+                            <p class="text-[11px] text-slate-400 truncate max-w-xs">{{ exp.notes }}</p>
+                            {% endif %}
+                        </td>
+                        <td class="py-3.5 px-5 whitespace-nowrap">
+                            <span class="text-xs px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                                {{ exp.payment_method }}
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-5 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                            {{ currency.symbol }}{{ "%.2f"|format(exp.amount) }}
+                        </td>
+                        <td class="py-3.5 px-5 text-center whitespace-nowrap">
+                            <div class="inline-flex items-center space-x-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                                <button onclick="editExpense({{ exp.id }})" class="p-1.5 rounded-lg text-slate-400 hover:text-teal-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Edit">
+                                    <i class="fa-solid fa-pen text-xs"></i>
+                                </button>
+                                <button onclick="deleteExpense({{ exp.id }})" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Delete">
+                                    <i class="fa-solid fa-trash text-xs"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="py-8 text-center text-slate-400 text-sm">
+                            <i class="fa-regular fa-folder-open text-3xl mb-2 text-slate-300 dark:text-slate-600 block"></i>
+                            No expenses logged yet. Click "+ Log Expense" to get started!
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Mobile Card View (optimized for smartphones) -->
+        <div class="sm:hidden divide-y divide-slate-100 dark:divide-slate-800/80">
+            {% for exp in recent_expenses %}
+            <div class="p-4 flex items-center justify-between active:bg-slate-50 dark:active:bg-slate-800/50 transition-colors" onclick="editExpense({{ exp.id }})">
+                <div class="flex items-center space-x-3 min-w-0">
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white flex-shrink-0 shadow-sm" style="background-color: {{ exp.category_color }};">
+                        <i class="fa-solid fa-{{ exp.category_icon }} text-sm"></i>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <p class="font-semibold text-sm text-slate-900 dark:text-white truncate">{{ exp.description }}</p>
+                        <div class="flex items-center space-x-2 text-xs text-slate-400 mt-0.5">
+                            <span>{{ exp.category_name }}</span>
+                            <span>&bull;</span>
+                            <span>{{ exp.date }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-right flex-shrink-0 pl-3">
+                    <span class="font-bold text-sm text-slate-900 dark:text-white block">
+                        {{ currency.symbol }}{{ "%.2f"|format(exp.amount) }}
+                    </span>
+                    <span class="text-[10px] text-slate-400">{{ exp.payment_method }}</span>
+                </div>
+            </div>
+            {% else %}
+            <div class="p-6 text-center text-slate-400 text-xs">
+                No expenses logged yet. Tap the + button below to log one!
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        initDashboardCharts("{{ selected_month }}");
+    });
+</script>
+{% endblock %}
