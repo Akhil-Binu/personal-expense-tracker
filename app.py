@@ -12,6 +12,8 @@ import excel_service
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
+__version__ = "1.0.0"
+
 # Initialize database on startup
 database.init_db(seed_sample_data=True)
 
@@ -62,6 +64,7 @@ def inject_global_data():
         "combined_bank_balance": database.get_combined_balance(user_id=user_id),
         "currency": database.get_currency(),
         "supported_currencies": SUPPORTED_CURRENCIES,
+        "app_version": __version__,
     }
 
 # ==================== Authentication Views ====================
