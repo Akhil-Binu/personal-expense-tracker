@@ -553,6 +553,77 @@ def update_category(cat_id, name, icon, color, monthly_budget, user_id=None):
         conn.commit()
         return cursor.rowcount > 0
 
+def update_category_budget(cat_id, monthly_budget, user_id=1):
+    """Updates the monthly budget for a single category."""
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE categories
+            SET monthly_budget = ?
+            WHERE id = ? AND user_id = ?
+        """, (max(0.0, float(monthly_budget or 0.0)), int(cat_id), user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def update_monthly_budgets(category_budgets, user_id=1):
+    """
+    Updates budgets for multiple categories in a single atomic transaction.
+    category_budgets: dict of {category_id: amount} or list of dicts.
+    """
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        updated_count = 0
+        if isinstance(category_budgets, dict):
+            items = category_budgets.items()
+        elif isinstance(category_budgets, list):
+            items = [(item["id"], item.get("budget", item.get("monthly_budget", 0))) for item in category_budgets]
+        else:
+            items = []
+
+        for cat_id, budget in items:
+            cursor.execute("""
+                UPDATE categories
+                SET monthly_budget = ?
+                WHERE id = ? AND user_id = ?
+            """, (max(0.0, float(budget or 0.0)), int(cat_id), user_id))
+            updated_count += cursor.rowcount
+        conn.commit()
+        return updated_count
+
+def set_total_monthly_budget(new_total, user_id=1):
+    """
+    Sets an overall monthly budget and proportionally distributes it
+    across existing categories for the user.
+    """
+    user_id = user_id or 1
+    new_total = max(0.0, float(new_total or 0.0))
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, monthly_budget FROM categories WHERE user_id = ? ORDER BY id ASC", (user_id,))
+        cats = [dict(r) for r in cursor.fetchall()]
+        if not cats:
+            return 0
+
+        current_total = sum(c["monthly_budget"] for c in cats)
+        n = len(cats)
+        
+        if current_total > 0:
+            # Scale proportionally
+            for c in cats:
+                ratio = c["monthly_budget"] / current_total
+                scaled_budget = round(new_total * ratio, 2)
+                cursor.execute("UPDATE categories SET monthly_budget = ? WHERE id = ? AND user_id = ?", (scaled_budget, c["id"], user_id))
+        else:
+            # Distribute equally
+            equal_share = round(new_total / n, 2)
+            for c in cats:
+                cursor.execute("UPDATE categories SET monthly_budget = ? WHERE id = ? AND user_id = ?", (equal_share, c["id"], user_id))
+                
+        conn.commit()
+        return n
+
 def delete_category(cat_id, user_id=None):
     with get_connection() as conn:
         cursor = conn.cursor()
