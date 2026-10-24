@@ -60,6 +60,33 @@ def init_db(seed_sample_data=True):
             )
         """)
 
+        # Settings table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+        
+        # Create default admin user if none exists
+        cursor.execute("SELECT COUNT(*) FROM users")
+        if cursor.fetchone()[0] == 0:
+            words, phrase = auth_service.generate_recovery_phrase(12)
+            pwd_hash = auth_service.hash_password("admin123")
+            phrase_hash = auth_service.hash_phrase(phrase)
+            cursor.execute("""
+                INSERT INTO users (id, username, email, password_hash, recovery_phrase_hash)
+                VALUES (1, 'admin', 'admin@example.com', ?, ?)
+            """, (pwd_hash, phrase_hash))
+            # Also store initial admin phrase in settings for easy discovery on first run
+            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('admin_initial_recovery_phrase', ?)", (phrase,))
+        
+        # Default currency setting
+        cursor.execute("SELECT value FROM settings WHERE key = 'currency_code'")
+        if not cursor.fetchone():
+            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('currency_code', 'USD')")
+            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('currency_symbol', '$')")
+
         # Categories table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS categories (
@@ -162,37 +189,6 @@ def init_db(seed_sample_data=True):
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, acc)
 
-        # Link any unlinked sample expenses to accounts for user 1
-        cursor.execute("UPDATE expenses SET account_id = 1 WHERE account_id IS NULL AND payment_method IN ('Debit Card', 'Bank Transfer', 'Credit Card') AND user_id = 1")
-        cursor.execute("UPDATE expenses SET account_id = 3 WHERE account_id IS NULL AND payment_method IN ('UPI / Digital Wallet') AND user_id = 1")
-
-        # Settings table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            )
-        """)
-        
-        # Create default admin user if none exists
-        cursor.execute("SELECT COUNT(*) FROM users")
-        if cursor.fetchone()[0] == 0:
-            words, phrase = auth_service.generate_recovery_phrase(12)
-            pwd_hash = auth_service.hash_password("admin123")
-            phrase_hash = auth_service.hash_phrase(phrase)
-            cursor.execute("""
-                INSERT INTO users (id, username, email, password_hash, recovery_phrase_hash)
-                VALUES (1, 'admin', 'admin@example.com', ?, ?)
-            """, (pwd_hash, phrase_hash))
-            # Also store initial admin phrase in settings for easy discovery on first run
-            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('admin_initial_recovery_phrase', ?)", (phrase,))
-        
-        # Default currency setting
-        cursor.execute("SELECT value FROM settings WHERE key = 'currency_code'")
-        if not cursor.fetchone():
-            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('currency_code', 'USD')")
-            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('currency_symbol', '$')")
-
         # Create indexes for fast querying by date, category and user
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category_id)")
@@ -212,6 +208,10 @@ def init_db(seed_sample_data=True):
         cursor.execute("SELECT COUNT(*) FROM expenses WHERE user_id = 1")
         if cursor.fetchone()[0] == 0 and seed_sample_data:
             _seed_sample_expenses(conn)
+            
+        # Link any unlinked sample expenses to accounts for user 1
+        cursor.execute("UPDATE expenses SET account_id = 1 WHERE account_id IS NULL AND payment_method IN ('Debit Card', 'Bank Transfer', 'Credit Card') AND user_id = 1")
+        cursor.execute("UPDATE expenses SET account_id = 3 WHERE account_id IS NULL AND payment_method IN ('UPI / Digital Wallet') AND user_id = 1")
             
         conn.commit()
 
