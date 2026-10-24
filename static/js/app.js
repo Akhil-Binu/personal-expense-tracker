@@ -806,3 +806,179 @@ async function deleteAccount(id, name) {
         showToast("Network error deleting bank account", "error");
     }
 }
+
+// ==================== MONTHLY BUDGET MODAL & MANAGEMENT ====================
+
+let cachedBudgetCategories = [];
+
+async function openEditMonthlyBudgetModal(focusCatId = null) {
+    const modal = document.getElementById("monthlyBudgetModal");
+    if (!modal) return;
+
+    try {
+        const res = await fetch("/api/budget");
+        const data = await res.json();
+        if (!data.success) {
+            showToast("Failed to load budget data", "error");
+            return;
+        }
+
+        cachedBudgetCategories = data.categories || [];
+        const sym = getCurrencySymbol();
+        const total = data.total_budget || 0;
+
+        document.getElementById("modalTargetBudgetInput").value = total.toFixed(2);
+        
+        const listContainer = document.getElementById("modalCategoryBudgetList");
+        listContainer.innerHTML = "";
+
+        cachedBudgetCategories.forEach(cat => {
+            const row = document.createElement("div");
+            row.id = `cat-budget-row-${cat.id}`;
+            row.className = "py-2.5 flex items-center justify-between gap-3 group transition-colors rounded-xl px-2 hover:bg-slate-50 dark:hover:bg-slate-800/40";
+            
+            row.innerHTML = `
+                <div class="flex items-center space-x-2.5 min-w-0 flex-1">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs flex-shrink-0 shadow-sm" style="background-color: ${cat.color}">
+                        <i class="fa-solid fa-${cat.icon}"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${cat.name}</p>
+                        <span class="text-[10px] text-slate-400">Spent: ${sym}${Number(cat.current_month_spent || 0).toFixed(2)}</span>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span id="pct-badge-${cat.id}" class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 w-14 text-center">
+                        0%
+                    </span>
+                    <div class="relative w-28 sm:w-32">
+                        <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">${sym}</span>
+                        <input type="number" step="5" min="0" data-cat-id="${cat.id}" value="${Number(cat.monthly_budget || 0).toFixed(2)}" class="modal-cat-budget-input w-full pl-6 pr-2 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-right text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 outline-none transition-all" oninput="onCategoryBudgetInputChange()">
+                    </div>
+                </div>
+            `;
+            listContainer.appendChild(row);
+        });
+
+        recalculateModalTotalBudget();
+        modal.classList.remove("hidden");
+
+        if (focusCatId) {
+            const targetRow = document.getElementById(`cat-budget-row-${focusCatId}`);
+            if (targetRow) {
+                targetRow.classList.add("bg-teal-50/80", "dark:bg-teal-950/50");
+                const input = targetRow.querySelector(".modal-cat-budget-input");
+                if (input) {
+                    input.focus();
+                    input.select();
+                }
+            }
+        } else {
+            document.getElementById("modalTargetBudgetInput").focus();
+        }
+    } catch (err) {
+        showToast("Error opening budget editor", "error");
+    }
+}
+
+function closeMonthlyBudgetModal() {
+    const modal = document.getElementById("monthlyBudgetModal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function onCategoryBudgetInputChange() {
+    const inputs = document.querySelectorAll(".modal-cat-budget-input");
+    let total = 0;
+    inputs.forEach(inp => {
+        total += parseFloat(inp.value || 0);
+    });
+
+    const sym = getCurrencySymbol();
+    document.getElementById("modalLiveTotalSum").textContent = `${sym}${total.toFixed(2)}`;
+    document.getElementById("modalFooterTotal").textContent = `${sym}${total.toFixed(2)}`;
+    document.getElementById("modalTargetBudgetInput").value = total.toFixed(2);
+
+    // Update percentage badges
+    inputs.forEach(inp => {
+        const catId = inp.dataset.catId;
+        const val = parseFloat(inp.value || 0);
+        const pct = total > 0 ? (val / total * 100).toFixed(1) : 0;
+        const badge = document.getElementById(`pct-badge-${catId}`);
+        if (badge) badge.textContent = `${pct}%`;
+    });
+}
+
+function recalculateModalTotalBudget() {
+    onCategoryBudgetInputChange();
+}
+
+function distributeBudgetProportionally() {
+    const targetVal = parseFloat(document.getElementById("modalTargetBudgetInput").value || 0);
+    if (targetVal < 0) return;
+
+    const inputs = document.querySelectorAll(".modal-cat-budget-input");
+    let currentTotal = 0;
+    inputs.forEach(inp => currentTotal += parseFloat(inp.value || 0));
+
+    if (currentTotal > 0) {
+        inputs.forEach(inp => {
+            const val = parseFloat(inp.value || 0);
+            const ratio = val / currentTotal;
+            inp.value = (targetVal * ratio).toFixed(2);
+        });
+    } else {
+        distributeBudgetEvenly();
+        return;
+    }
+    recalculateModalTotalBudget();
+}
+
+function distributeBudgetEvenly() {
+    const targetVal = parseFloat(document.getElementById("modalTargetBudgetInput").value || 0);
+    if (targetVal < 0) return;
+
+    const inputs = document.querySelectorAll(".modal-cat-budget-input");
+    if (!inputs.length) return;
+
+    const share = (targetVal / inputs.length).toFixed(2);
+    inputs.forEach(inp => inp.value = share);
+    recalculateModalTotalBudget();
+}
+
+async function handleSaveMonthlyBudget() {
+    const saveBtn = document.getElementById("saveBudgetBtn");
+    saveBtn.disabled = true;
+    document.getElementById("saveBudgetBtnText").textContent = "Saving...";
+
+    const inputs = document.querySelectorAll(".modal-cat-budget-input");
+    const categoryBudgets = {};
+    inputs.forEach(inp => {
+        categoryBudgets[inp.dataset.catId] = parseFloat(inp.value || 0);
+    });
+
+    try {
+        const res = await fetch("/api/budget", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ category_budgets: categoryBudgets })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            showToast("Monthly budget updated successfully!");
+            closeMonthlyBudgetModal();
+            setTimeout(() => window.location.reload(), 350);
+        } else {
+            showToast(data.error || "Failed to update monthly budget", "error");
+        }
+    } catch (err) {
+        showToast("Network error saving budget", "error");
+    } finally {
+        saveBtn.disabled = false;
+        document.getElementById("saveBudgetBtnText").textContent = "Save Monthly Budget";
+    }
+}
+
+function openQuickCategoryBudgetEdit(catId, catName, currentBudget) {
+    openEditMonthlyBudgetModal(catId);
+}

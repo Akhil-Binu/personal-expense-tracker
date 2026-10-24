@@ -13,16 +13,28 @@
             <p class="text-xs sm:text-sm text-slate-400 mt-0.5">Define spending limits per category to keep your finances disciplined</p>
         </div>
 
-        <button onclick="openAddCategoryModal()" class="py-2.5 px-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold text-sm rounded-xl shadow-md shadow-teal-600/20 transition-all flex items-center space-x-2">
-            <i class="fa-solid fa-plus"></i>
-            <span>New Category</span>
-        </button>
+        <div class="flex items-center space-x-2.5">
+            <button onclick="openEditMonthlyBudgetModal()" class="py-2.5 px-4 bg-teal-50 dark:bg-teal-950/60 border border-teal-200/70 dark:border-teal-800/70 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/40 font-semibold text-sm rounded-xl transition-all flex items-center space-x-2 shadow-sm">
+                <i class="fa-solid fa-sliders text-xs"></i>
+                <span>Edit Monthly Budget</span>
+            </button>
+            <button onclick="openAddCategoryModal()" class="py-2.5 px-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold text-sm rounded-xl shadow-md shadow-teal-600/20 transition-all flex items-center space-x-2">
+                <i class="fa-solid fa-plus text-xs"></i>
+                <span>New Category</span>
+            </button>
+        </div>
     </div>
 
     <!-- ==================== BUDGET KPI METRICS ==================== -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm">
-            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Total Monthly Budget</span>
+            <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Monthly Budget</span>
+                <button type="button" onclick="openEditMonthlyBudgetModal()" class="text-xs text-teal-600 dark:text-teal-400 font-semibold hover:underline flex items-center space-x-1">
+                    <i class="fa-solid fa-pen-to-square text-[10px]"></i>
+                    <span>Edit</span>
+                </button>
+            </div>
             <span class="text-2xl font-extrabold text-slate-900 dark:text-white">{{ currency.symbol }}{{ "%.2f"|format(total_budget) }}</span>
             <p class="text-xs text-slate-400 mt-1">Across {{ categories|length }} active categories</p>
         </div>
@@ -84,7 +96,12 @@
                     </div>
                     <div class="text-right">
                         <span class="text-xs text-slate-400 block">Monthly Limit</span>
-                        <span class="text-sm font-semibold text-slate-600 dark:text-slate-400">{{ currency.symbol }}{{ "%.2f"|format(cat.monthly_budget) }}</span>
+                        <div class="flex items-center justify-end space-x-1">
+                            <span class="text-sm font-semibold text-slate-600 dark:text-slate-400">{{ currency.symbol }}{{ "%.2f"|format(cat.monthly_budget) }}</span>
+                            <button onclick="openQuickCategoryBudgetEdit({{ cat.id }}, '{{ cat.name|replace("'", "\\'") }}', {{ cat.monthly_budget }})" class="p-1 rounded text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors" title="Quick Edit Budget">
+                                <i class="fa-solid fa-pen text-[10px]"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
 

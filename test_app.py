@@ -307,6 +307,50 @@ class ExpenseTrackerTestCase(unittest.TestCase):
         self.assertEqual(del_res.status_code, 200)
         self.assertIsNone(database.get_bank_account_by_id(acc2_id, user_id=user_id))
 
+    def test_monthly_budget_api(self):
+        """Test getting and updating monthly budgets (batch, overall, and single category)."""
+        # 1. Get current budget data
+        res = self.client.get("/api/budget")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data["success"])
+        self.assertIn("categories", data)
+        self.assertIn("total_budget", data)
+        self.assertGreater(len(data["categories"]), 0)
+
+        cat1_id = data["categories"][0]["id"]
+        cat2_id = data["categories"][1]["id"]
+
+        # 2. Update category budgets in batch
+        update_payload = {
+            "category_budgets": {
+                str(cat1_id): 650.0,
+                str(cat2_id): 350.0
+            }
+        }
+        res_post = self.client.post("/api/budget", json=update_payload)
+        self.assertEqual(res_post.status_code, 200)
+        self.assertTrue(res_post.get_json()["success"])
+
+        cat1 = database.get_category_by_id(cat1_id)
+        self.assertEqual(cat1["monthly_budget"], 650.0)
+        cat2 = database.get_category_by_id(cat2_id)
+        self.assertEqual(cat2["monthly_budget"], 350.0)
+
+        # 3. Scale total monthly budget proportionally
+        res_total = self.client.post("/api/budget", json={"total_budget": 5000.0})
+        self.assertEqual(res_total.status_code, 200)
+        json_total = res_total.get_json()
+        self.assertTrue(json_total["success"])
+        # Total budget should be ~5000.00
+        self.assertAlmostEqual(json_total["total_budget"], 5000.0, delta=1.0)
+
+        # 4. Update single category budget
+        res_single = self.client.put(f"/api/category/{cat1_id}/budget", json={"monthly_budget": 777.0})
+        self.assertEqual(res_single.status_code, 200)
+        cat1_updated = database.get_category_by_id(cat1_id)
+        self.assertEqual(cat1_updated["monthly_budget"], 777.0)
+
     def test_excel_template_and_import(self):
         """Test Excel template generation and round-trip import."""
         # 1. Download template

@@ -20,6 +20,7 @@ Track daily spending, categorize transactions, set category budgets, explore vis
 
 ## 📸 Key Highlights
 
+- 🎯 **Interactive Monthly Budget Editor**: Easily edit your total monthly budget or fine-tune limits per category. Click **"Edit Budget"** directly from the Dashboard KPI card or Categories page to set an overall target with 1-click **auto-scale proportionally** or **split evenly** features, live allocation percentages, and instant recalculation.
 - 🏛️ **Multi-Bank Accounts & Combined Net Balance**: Add different bank accounts (e.g. *Main Checking, High-Yield Savings, Digital Wallet / UPI, Brokerage*), track custom starting balances, and automatically aggregate all funds into **one combined net financial balance**. When logging expenses, optionally specify which bank account paid for it to track deductions in real-time.
 - 🔐 **Account Creation & 12-Word Mnemonic Backup**: Create private user accounts with decentralized 12-word backup recovery phrases (BIP-39 style). If you ever forget your password, your 12 keywords allow instant account recovery and password reset.
 - 📱 **Mobile, Tablet & Desktop Web App**: Native app feel with a bottom navigation bar and floating `+` action button on mobile, adaptive 2-column cards on tablet, and a wide analytics sidebar dashboard on desktop.
@@ -145,9 +146,9 @@ FinanceFlow includes a comprehensive unit test suite covering routes, JSON APIs,
 
 Output:
 ```
-..........
+...........
 ----------------------------------------------------------------------
-Ran 10 tests in 1.838s
+Ran 11 tests in 1.848s
 
 OK
 ```

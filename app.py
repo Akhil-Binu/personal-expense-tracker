@@ -548,6 +548,72 @@ def api_delete_category(cat_id):
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
 
+# ==================== Monthly Budget APIs ====================
+
+@app.route("/api/budget", methods=["GET"])
+@login_required
+def api_get_budget():
+    """Retrieve current monthly budget status and all category budgets."""
+    user = get_current_user()
+    user_id = user["id"]
+    categories = database.get_categories(user_id=user_id)
+    total_budget = sum(c["monthly_budget"] for c in categories)
+    total_spent = sum(c["current_month_spent"] for c in categories)
+    return jsonify({
+        "success": True,
+        "total_budget": round(total_budget, 2),
+        "total_spent": round(total_spent, 2),
+        "categories": categories
+    })
+
+@app.route("/api/budget", methods=["POST", "PUT"])
+@login_required
+def api_update_budget():
+    """
+    Update monthly budget.
+    Supports either:
+      - 'category_budgets': dict { cat_id: budget } or list of { id, budget }
+      - 'total_budget': overall monthly budget amount distributed across categories
+    """
+    user = get_current_user()
+    user_id = user["id"]
+    data = request.get_json() if request.is_json else request.form
+    try:
+        if "category_budgets" in data:
+            category_budgets = data["category_budgets"]
+            database.update_monthly_budgets(category_budgets, user_id=user_id)
+        elif "total_budget" in data:
+            total_budget = float(data["total_budget"])
+            database.set_total_monthly_budget(total_budget, user_id=user_id)
+        else:
+            return jsonify({"success": False, "error": "Missing 'category_budgets' or 'total_budget'"}), 400
+
+        categories = database.get_categories(user_id=user_id)
+        new_total = sum(c["monthly_budget"] for c in categories)
+        return jsonify({
+            "success": True,
+            "message": "Monthly budget updated successfully!",
+            "total_budget": round(new_total, 2),
+            "categories": categories
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route("/api/category/<int:cat_id>/budget", methods=["POST", "PUT"])
+@login_required
+def api_update_single_category_budget(cat_id):
+    """Update an individual category's monthly budget."""
+    user = get_current_user()
+    data = request.get_json() if request.is_json else request.form
+    try:
+        monthly_budget = float(data.get("monthly_budget", 0.0))
+        updated = database.update_category_budget(cat_id, monthly_budget, user_id=user["id"])
+        if not updated:
+            return jsonify({"success": False, "error": "Category not found"}), 404
+        return jsonify({"success": True, "message": "Category budget updated successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
 # ==================== Settings & Currency APIs ====================
 
 @app.route("/api/settings/currency", methods=["GET", "POST"])
