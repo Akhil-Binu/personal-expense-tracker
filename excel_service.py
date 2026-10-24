@@ -31,11 +31,12 @@ TOTAL_BORDER = Border(
     bottom=Side(style='double', color="1E293B")
 )
 
-def export_expenses_to_excel(month_str=None, category_id=None, payment_method=None, search=None, currency_symbol=None):
+def export_expenses_to_excel(month_str=None, category_id=None, payment_method=None, search=None, currency_symbol=None, user_id=1):
     """
     Generates a beautifully formatted multi-sheet Excel workbook (.xlsx).
     Returns a io.BytesIO buffer.
     """
+    user_id = user_id or 1
     if not currency_symbol:
         currency_symbol = database.get_currency()["symbol"]
     curr_fmt = f'"{currency_symbol}"#,##0.00'
@@ -50,9 +51,9 @@ def export_expenses_to_excel(month_str=None, category_id=None, payment_method=No
     ws_summary = wb.create_sheet(title="Executive Summary")
     ws_summary.views.sheetView[0].showGridLines = True
     
-    metrics = database.get_monthly_metrics(month_str)
-    category_breakdown = database.get_category_breakdown(month_str)
-    payment_methods = database.get_payment_method_breakdown(month_str)
+    metrics = database.get_monthly_metrics(month_str, user_id=user_id)
+    category_breakdown = database.get_category_breakdown(month_str, user_id=user_id)
+    payment_methods = database.get_payment_method_breakdown(month_str, user_id=user_id)
     
     # Title Banner
     ws_summary.merge_cells("A1:G1")
@@ -247,7 +248,7 @@ def export_expenses_to_excel(month_str=None, category_id=None, payment_method=No
     # Fetch expenses with filters applied
     start_date = f"{month_str}-01" if month_str else None
     end_date = f"{month_str}-31" if month_str else None
-    expenses = database.get_expenses(start_date=start_date, end_date=end_date, category_id=category_id, payment_method=payment_method, search=search)
+    expenses = database.get_expenses(start_date=start_date, end_date=end_date, category_id=category_id, payment_method=payment_method, search=search, user_id=user_id)
     
     row_num = 2
     for exp in expenses:
@@ -371,15 +372,16 @@ def generate_import_template():
     output.seek(0)
     return output
 
-def import_expenses_from_excel(file_stream):
+def import_expenses_from_excel(file_stream, user_id=1):
     """
-    Parses an uploaded Excel file and inserts valid expense rows into SQLite.
+    Parses an uploaded Excel file and inserts valid expense rows into SQLite for a user.
     Returns: dict with imported count, skipped count, and list of errors if any.
     """
+    user_id = user_id or 1
     wb = openpyxl.load_workbook(file_stream, data_only=True)
     ws = wb.active
     
-    categories = {c["name"].strip().lower(): c["id"] for c in database.get_categories()}
+    categories = {c["name"].strip().lower(): c["id"] for c in database.get_categories(user_id=user_id)}
     
     imported_count = 0
     skipped_count = 0
@@ -452,7 +454,7 @@ def import_expenses_from_excel(file_stream):
             cat_id = categories.get(cat_name.lower())
             if not cat_id:
                 # Create category if missing
-                cat_id = database.add_category(name=cat_name, icon="tag", color="#6B7280", monthly_budget=100.0)
+                cat_id = database.add_category(name=cat_name, icon="tag", color="#6B7280", monthly_budget=100.0, user_id=user_id)
                 categories[cat_name.lower()] = cat_id
                 
             payment_method = str(raw_pay or "Cash").strip()
@@ -465,7 +467,8 @@ def import_expenses_from_excel(file_stream):
                 amount=amount,
                 payment_method=payment_method,
                 description=description,
-                notes=notes
+                notes=notes,
+                user_id=user_id
             )
             imported_count += 1
         except Exception as e:

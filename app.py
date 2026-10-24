@@ -2,8 +2,9 @@
 Personal Expense Tracker - Flask Application
 Serves desktop, tablet, and mobile web experiences with SQLite backend & Excel integration.
 """
-from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, flash, session
 import os
+from functools import wraps
 from datetime import datetime, date
 import database
 import excel_service
@@ -27,29 +28,143 @@ SUPPORTED_CURRENCIES = [
     {"code": "CHF", "symbol": "CHF", "label": "CHF (CHF) - Swiss Franc"},
 ]
 
+def get_current_user():
+    """Returns the authenticated user dict from session or None."""
+    user_id = session.get("user_id")
+    if user_id:
+        return database.get_user_by_id(user_id)
+    return None
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not get_current_user():
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"success": False, "error": "Authentication required", "login_required": True}), 401
+            return redirect(url_for("login_page", next=request.url))
+        return f(*args, **kwargs)
+    return decorated_function
+
 # Context processor for templates
 @app.context_processor
 def inject_global_data():
     today = date.today()
+    user = get_current_user()
+    user_id = user["id"] if user else 1
     return {
+        "current_user": user,
         "current_month": today.strftime("%Y-%m"),
         "current_date": today.isoformat(),
         "today_display": today.strftime("%A, %B %d, %Y"),
-        "available_months": database.get_available_months(),
-        "categories_list": database.get_categories(),
+        "available_months": database.get_available_months(user_id=user_id),
+        "categories_list": database.get_categories(user_id=user_id),
         "currency": database.get_currency(),
         "supported_currencies": SUPPORTED_CURRENCIES,
     }
 
+# ==================== Authentication Views ====================
+
+@app.route("/login", methods=["GET", "POST"])
+def login_page():
+    if get_current_user():
+        return redirect(url_for("dashboard"))
+        
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        
+        user = database.authenticate_user(username, password)
+        if user:
+            session["user_id"] = user["id"]
+            flash(f"Welcome back, {user['username']}!", "success")
+            next_url = request.args.get("next") or url_for("dashboard")
+            return redirect(next_url)
+        else:
+            error = "Invalid username or password. Please try again."
+            
+    return render_template("login.html", error=error)
+
+@app.route("/register", methods=["GET", "POST"])
+def register_page():
+    if get_current_user():
+        return redirect(url_for("dashboard"))
+        
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        
+        if password != confirm_password:
+            error = "Passwords do not match."
+        elif len(password) < 6:
+            error = "Password must be at least 6 characters long."
+        else:
+            try:
+                user_data = database.create_user(username=username, password=password, email=email)
+                # Automatically log in the user
+                session["user_id"] = user_data["id"]
+                # Render the backup keywords presentation screen
+                return render_template(
+                    "backup_keywords.html",
+                    username=user_data["username"],
+                    words=user_data["recovery_words"],
+                    phrase=user_data["recovery_phrase"]
+                )
+            except ValueError as ve:
+                error = str(ve)
+            except Exception as e:
+                error = f"Registration error: {str(e)}"
+                
+    return render_template("register.html", error=error)
+
+@app.route("/recover", methods=["GET", "POST"])
+def recover_page():
+    """Account recovery page using the 12 backup keywords."""
+    error = None
+    success = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        recovery_phrase = request.form.get("recovery_phrase", "").strip()
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        
+        if new_password != confirm_password:
+            error = "Passwords do not match."
+        elif len(new_password) < 6:
+            error = "New password must be at least 6 characters long."
+        else:
+            try:
+                database.recover_user_password(username, recovery_phrase, new_password)
+                flash("Your password has been successfully reset! You can now log in.", "success")
+                return redirect(url_for("login_page"))
+            except ValueError as ve:
+                error = str(ve)
+            except Exception as e:
+                error = f"Recovery failed: {str(e)}"
+                
+    return render_template("recover.html", error=error, success=success)
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    flash("You have been logged out successfully.", "info")
+    return redirect(url_for("login_page"))
+
 # ==================== Web Page Views ====================
 
 @app.route("/")
+@login_required
 def dashboard():
     """Main dashboard page."""
+    user = get_current_user()
+    user_id = user["id"]
     month = request.args.get("month", date.today().strftime("%Y-%m"))
-    metrics = database.get_monthly_metrics(month)
-    categories = database.get_category_breakdown(month)
-    recent_expenses = database.get_expenses(limit=8)
+    metrics = database.get_monthly_metrics(month, user_id=user_id)
+    categories = database.get_category_breakdown(month, user_id=user_id)
+    recent_expenses = database.get_expenses(limit=8, user_id=user_id)
     return render_template(
         "index.html",
         selected_month=month,
@@ -60,8 +175,11 @@ def dashboard():
     )
 
 @app.route("/expenses")
+@login_required
 def expenses_page():
     """Expenses listing and filtering view."""
+    user = get_current_user()
+    user_id = user["id"]
     start_date = request.args.get("start_date")
     end_date = request.args.get("end_date")
     category_id = request.args.get("category_id")
@@ -74,10 +192,10 @@ def expenses_page():
         end_date=end_date,
         category_id=category_id,
         payment_method=payment_method,
-        search=search
+        search=search,
+        user_id=user_id
     )
-    categories = database.get_categories()
-    
+    categories = database.get_categories(user_id=user_id)
     total_amount = sum(e["amount"] for e in expenses)
     
     return render_template(
@@ -96,12 +214,15 @@ def expenses_page():
     )
 
 @app.route("/reports")
+@login_required
 def reports_page():
     """Monthly analytics and reporting view."""
+    user = get_current_user()
+    user_id = user["id"]
     month = request.args.get("month", date.today().strftime("%Y-%m"))
-    metrics = database.get_monthly_metrics(month)
-    categories = database.get_category_breakdown(month)
-    payment_methods = database.get_payment_method_breakdown(month)
+    metrics = database.get_monthly_metrics(month, user_id=user_id)
+    categories = database.get_category_breakdown(month, user_id=user_id)
+    payment_methods = database.get_payment_method_breakdown(month, user_id=user_id)
     
     return render_template(
         "reports.html",
@@ -113,9 +234,12 @@ def reports_page():
     )
 
 @app.route("/categories")
+@login_required
 def categories_page():
     """Category and budget management view."""
-    categories = database.get_categories()
+    user = get_current_user()
+    user_id = user["id"]
+    categories = database.get_categories(user_id=user_id)
     total_budget = sum(c["monthly_budget"] for c in categories)
     total_spent = sum(c["current_month_spent"] for c in categories)
     return render_template(
@@ -129,13 +253,16 @@ def categories_page():
 # ==================== JSON API Endpoints ====================
 
 @app.route("/api/chart-data")
+@login_required
 def api_chart_data():
     """Provides chart series for Dashboard & Reports."""
+    user = get_current_user()
+    user_id = user["id"]
     month = request.args.get("month", date.today().strftime("%Y-%m"))
-    category_data = database.get_category_breakdown(month)
-    daily_data = database.get_daily_spending_trend(month)
-    history_data = database.get_monthly_history(num_months=6)
-    payment_data = database.get_payment_method_breakdown(month)
+    category_data = database.get_category_breakdown(month, user_id=user_id)
+    daily_data = database.get_daily_spending_trend(month, user_id=user_id)
+    history_data = database.get_monthly_history(num_months=6, user_id=user_id)
+    payment_data = database.get_payment_method_breakdown(month, user_id=user_id)
     
     return jsonify({
         "categories": {
@@ -155,8 +282,11 @@ def api_chart_data():
     })
 
 @app.route("/api/expense", methods=["POST"])
+@login_required
 def api_add_expense():
     """Add a new expense."""
+    user = get_current_user()
+    user_id = user["id"]
     data = request.get_json() if request.is_json else request.form
     try:
         exp_date = data.get("date") or date.today().isoformat()
@@ -177,23 +307,28 @@ def api_add_expense():
             amount=amount,
             payment_method=payment_method,
             description=description,
-            notes=notes
+            notes=notes,
+            user_id=user_id
         )
         return jsonify({"success": True, "id": expense_id, "message": "Expense added successfully!"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
 
 @app.route("/api/expense/<int:expense_id>", methods=["GET"])
+@login_required
 def api_get_expense(expense_id):
     """Retrieve single expense details."""
-    exp = database.get_expense_by_id(expense_id)
+    user = get_current_user()
+    exp = database.get_expense_by_id(expense_id, user_id=user["id"])
     if not exp:
         return jsonify({"success": False, "error": "Expense not found"}), 404
     return jsonify({"success": True, "expense": exp})
 
 @app.route("/api/expense/<int:expense_id>", methods=["PUT", "POST"])
+@login_required
 def api_update_expense(expense_id):
     """Update an existing expense."""
+    user = get_current_user()
     data = request.get_json() if request.is_json else request.form
     try:
         exp_date = data.get("date")
@@ -215,7 +350,8 @@ def api_update_expense(expense_id):
             amount=amount,
             payment_method=payment_method,
             description=description,
-            notes=notes
+            notes=notes,
+            user_id=user["id"]
         )
         if not updated:
             return jsonify({"success": False, "error": "Expense not found"}), 404
@@ -224,10 +360,12 @@ def api_update_expense(expense_id):
         return jsonify({"success": False, "error": str(e)}), 400
 
 @app.route("/api/expense/<int:expense_id>/delete", methods=["POST", "DELETE"])
+@login_required
 def api_delete_expense(expense_id):
     """Delete an expense record."""
+    user = get_current_user()
     try:
-        deleted = database.delete_expense(expense_id)
+        deleted = database.delete_expense(expense_id, user_id=user["id"])
         if not deleted:
             return jsonify({"success": False, "error": "Expense not found"}), 404
         return jsonify({"success": True, "message": "Expense deleted successfully!"})
@@ -237,8 +375,10 @@ def api_delete_expense(expense_id):
 # ==================== Category APIs ====================
 
 @app.route("/api/category", methods=["POST"])
+@login_required
 def api_add_category():
     """Create a new category."""
+    user = get_current_user()
     data = request.get_json() if request.is_json else request.form
     try:
         name = data.get("name", "").strip()
@@ -249,14 +389,16 @@ def api_add_category():
         if not name:
             return jsonify({"success": False, "error": "Category name is required"}), 400
             
-        cat_id = database.add_category(name, icon, color, budget)
+        cat_id = database.add_category(name, icon, color, budget, user_id=user["id"])
         return jsonify({"success": True, "id": cat_id, "message": "Category created successfully!"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
 
 @app.route("/api/category/<int:cat_id>", methods=["PUT", "POST"])
+@login_required
 def api_update_category(cat_id):
     """Update category settings and budget."""
+    user = get_current_user()
     data = request.get_json() if request.is_json else request.form
     try:
         name = data.get("name", "").strip()
@@ -267,7 +409,7 @@ def api_update_category(cat_id):
         if not name:
             return jsonify({"success": False, "error": "Category name is required"}), 400
             
-        updated = database.update_category(cat_id, name, icon, color, budget)
+        updated = database.update_category(cat_id, name, icon, color, budget, user_id=user["id"])
         if not updated:
             return jsonify({"success": False, "error": "Category not found"}), 404
         return jsonify({"success": True, "message": "Category updated successfully!"})
@@ -275,10 +417,12 @@ def api_update_category(cat_id):
         return jsonify({"success": False, "error": str(e)}), 400
 
 @app.route("/api/category/<int:cat_id>/delete", methods=["POST", "DELETE"])
+@login_required
 def api_delete_category(cat_id):
     """Delete a category (only if no expenses linked)."""
+    user = get_current_user()
     try:
-        deleted = database.delete_category(cat_id)
+        deleted = database.delete_category(cat_id, user_id=user["id"])
         if not deleted:
             return jsonify({"success": False, "error": "Category not found"}), 404
         return jsonify({"success": True, "message": "Category deleted successfully!"})
@@ -297,7 +441,6 @@ def api_currency_settings():
         code = (data.get("code") or "USD").strip().upper()
         symbol = data.get("symbol")
         
-        # If symbol not supplied, look it up in supported currencies
         if not symbol:
             matched = next((c["symbol"] for c in SUPPORTED_CURRENCIES if c["code"] == code), "$")
             symbol = matched
@@ -317,8 +460,11 @@ def api_currency_settings():
 # ==================== Excel Export & Import Routes ====================
 
 @app.route("/export/excel")
+@login_required
 def export_excel():
     """Generates and downloads the multi-tab formatted Excel report."""
+    user = get_current_user()
+    user_id = user["id"]
     month = request.args.get("month")
     category_id = request.args.get("category_id")
     category_id = int(category_id) if category_id and category_id.isdigit() else None
@@ -330,7 +476,8 @@ def export_excel():
         category_id=category_id,
         payment_method=payment_method,
         search=search,
-        currency_symbol=database.get_currency()["symbol"]
+        currency_symbol=database.get_currency()["symbol"],
+        user_id=user_id
     )
     filename = f"Expense_Report_{month or 'All'}_{datetime.now().strftime('%Y%m%d')}.xlsx"
     return send_file(
@@ -352,8 +499,11 @@ def download_template():
     )
 
 @app.route("/import/excel", methods=["POST"])
+@login_required
 def import_excel():
     """Accepts an uploaded Excel file and imports expenses."""
+    user = get_current_user()
+    user_id = user["id"]
     if "file" not in request.files:
         return jsonify({"success": False, "error": "No file uploaded"}), 400
         
@@ -365,7 +515,7 @@ def import_excel():
         return jsonify({"success": False, "error": "File must be an Excel spreadsheet (.xlsx)"}), 400
         
     try:
-        result = excel_service.import_expenses_from_excel(file.stream)
+        result = excel_service.import_expenses_from_excel(file.stream, user_id=user_id)
         return jsonify({
             "success": True,
             "message": f"Successfully imported {result['imported']} expenses! ({result['skipped']} skipped)",
@@ -376,3 +526,4 @@ def import_excel():
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
+

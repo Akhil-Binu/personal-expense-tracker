@@ -20,6 +20,7 @@ Track daily spending, categorize transactions, set category budgets, explore vis
 
 ## 📸 Key Highlights
 
+- 🔐 **Account Creation & 12-Word Mnemonic Backup**: Create private user accounts with decentralized 12-word backup recovery phrases (BIP-39 style). If you ever forget your password, your 12 keywords allow instant account recovery and password reset.
 - 📱 **Mobile, Tablet & Desktop Web App**: Native app feel with a bottom navigation bar and floating `+` action button on mobile, adaptive 2-column cards on tablet, and a wide analytics sidebar dashboard on desktop.
 - 💵 **Multi-Currency Support**: Instant 1-click currency switching across **10+ currencies** (`USD $`, `INR ₹`, `EUR €`, `GBP £`, `JPY ¥`, `CAD C$`, `AUD A$`, `AED`, `SGD S$`, `CHF`), updating charts, tables, budgets, and Excel exports dynamically.
 - 📊 **Interactive Financial Analytics**: Chart.js graphs for category distribution (doughnut), daily spending trends (bar), 6-month historical comparison, and payment method share.
@@ -152,15 +153,38 @@ OK
 
 ---
 
+---
+
+## 🔐 Account Creation & Backup Keywords System
+
+FinanceFlow includes user authentication designed for privacy and resilience:
+
+1. **Sign Up**:
+   - Create your personal account with a unique username and password.
+   - The app automatically creates a private sandbox for your expenses and budgets.
+
+2. **12-Word Backup Keywords (Recovery Phrase)**:
+   - When registering, FinanceFlow generates **12 cryptographically random, memorable dictionary words** (e.g., `acorn amber anchor beacon blossom clover...`).
+   - You can copy them or download them as a `.txt` file.
+   - The recovery phrase is securely hashed in SQLite using salted Werkzeug hashes.
+
+3. **Account Recovery & Password Reset**:
+   - If you ever forget your password, navigate to **Forgot Password?** (`/recover`).
+   - Enter your username, type or paste your **12 backup keywords**, and set your new password.
+   - Instant recovery with **zero external email dependencies**.
+
+---
+
 ## 📁 Repository Structure
 
 ```
 personal-expense-tracker/
-├── app.py                # Flask server, page routes & JSON REST endpoints
-├── database.py           # SQLite connection, schema, seed data & queries
+├── app.py                # Flask server, authentication, page routes & REST endpoints
+├── auth_service.py       # Password hashing & 12-word mnemonic recovery phrase generator
+├── database.py           # SQLite connection, multi-user schema & transactional queries
 ├── excel_service.py      # openpyxl formatted workbook generator & parser
 ├── run.py                # Smart launcher with local LAN IP resolution
-├── test_app.py           # Comprehensive unit tests
+├── test_app.py           # Comprehensive unit tests (all 9 tests passing)
 ├── requirements.txt      # Frozen pip dependencies
 ├── .gitignore            # Git exclusion rules
 ├── LICENSE               # MIT License
@@ -171,6 +195,10 @@ personal-expense-tracker/
 │       └── app.js        # Theme manager, Chart.js renderers, modals, currency API
 └── templates/
     ├── base.html         # Responsive base layout (Desktop sidebar + Mobile bottom nav)
+    ├── login.html        # Clean login interface with recovery link
+    ├── register.html     # Account creation interface
+    ├── backup_keywords.html # 12-word mnemonic keywords presentation card
+    ├── recover.html      # Account recovery & password reset using 12 keywords
     ├── index.html        # Main dashboard (KPI cards, charts, recent transactions)
     ├── expenses.html     # Expenses table, advanced filters, search & Excel export
     ├── reports.html      # Monthly reports, 4 interactive charts, variance table

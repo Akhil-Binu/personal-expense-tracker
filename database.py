@@ -6,6 +6,7 @@ import sqlite3
 import os
 from datetime import datetime, date, timedelta
 from contextlib import contextmanager
+import auth_service
 
 DB_NAME = "expenses.db"
 
@@ -43,19 +44,33 @@ DEFAULT_CATEGORIES = [
 ]
 
 def init_db(seed_sample_data=True):
-    """Initializes tables and optionally seeds default categories and initial transactions."""
+    """Initializes tables, users, default categories and initial transactions."""
     with get_connection() as conn:
         cursor = conn.cursor()
         
+        # Users table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT,
+                password_hash TEXT NOT NULL,
+                recovery_phrase_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         # Categories table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS categories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
                 icon TEXT NOT NULL DEFAULT 'tag',
                 color TEXT NOT NULL DEFAULT '#3B82F6',
                 monthly_budget REAL NOT NULL DEFAULT 0.0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                user_id INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
             )
         """)
         
@@ -69,11 +84,48 @@ def init_db(seed_sample_data=True):
                 payment_method TEXT NOT NULL,
                 description TEXT NOT NULL,
                 notes TEXT,
+                user_id INTEGER DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT
+                FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
             )
         """)
         
+        # Migrate schema if columns or constraints need updating
+        cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='categories'")
+        cat_tbl = cursor.fetchone()
+        if cat_tbl and "name TEXT UNIQUE" in cat_tbl["sql"]:
+            cursor.execute("PRAGMA foreign_keys = OFF")
+            cursor.execute("""
+                CREATE TABLE categories_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    icon TEXT NOT NULL DEFAULT 'tag',
+                    color TEXT NOT NULL DEFAULT '#3B82F6',
+                    monthly_budget REAL NOT NULL DEFAULT 0.0,
+                    user_id INTEGER DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(name, user_id)
+                )
+            """)
+            cursor.execute("""
+                INSERT INTO categories_new (id, name, icon, color, monthly_budget, user_id, created_at)
+                SELECT id, name, icon, color, monthly_budget, COALESCE(user_id, 1), created_at FROM categories
+            """)
+            cursor.execute("DROP TABLE categories")
+            cursor.execute("ALTER TABLE categories_new RENAME TO categories")
+            cursor.execute("PRAGMA foreign_keys = ON")
+
+        cursor.execute("PRAGMA table_info(categories)")
+        cat_columns = [col["name"] for col in cursor.fetchall()]
+        if "user_id" not in cat_columns:
+            cursor.execute("ALTER TABLE categories ADD COLUMN user_id INTEGER DEFAULT 1")
+
+        cursor.execute("PRAGMA table_info(expenses)")
+        exp_columns = [col["name"] for col in cursor.fetchall()]
+        if "user_id" not in exp_columns:
+            cursor.execute("ALTER TABLE expenses ADD COLUMN user_id INTEGER DEFAULT 1")
+
         # Settings table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -82,27 +134,42 @@ def init_db(seed_sample_data=True):
             )
         """)
         
+        # Create default admin user if none exists
+        cursor.execute("SELECT COUNT(*) FROM users")
+        if cursor.fetchone()[0] == 0:
+            words, phrase = auth_service.generate_recovery_phrase(12)
+            pwd_hash = auth_service.hash_password("admin123")
+            phrase_hash = auth_service.hash_phrase(phrase)
+            cursor.execute("""
+                INSERT INTO users (id, username, email, password_hash, recovery_phrase_hash)
+                VALUES (1, 'admin', 'admin@example.com', ?, ?)
+            """, (pwd_hash, phrase_hash))
+            # Also store initial admin phrase in settings for easy discovery on first run
+            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('admin_initial_recovery_phrase', ?)", (phrase,))
+        
         # Default currency setting
         cursor.execute("SELECT value FROM settings WHERE key = 'currency_code'")
         if not cursor.fetchone():
             cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('currency_code', 'USD')")
             cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('currency_symbol', '$')")
 
-        # Create indexes for fast querying by date and category
+        # Create indexes for fast querying by date, category and user
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_user ON expenses(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_categories_user ON categories(user_id)")
         
         # Seed categories if none exist
-        cursor.execute("SELECT COUNT(*) FROM categories")
+        cursor.execute("SELECT COUNT(*) FROM categories WHERE user_id = 1")
         if cursor.fetchone()[0] == 0:
             for cat in DEFAULT_CATEGORIES:
                 cursor.execute("""
-                    INSERT INTO categories (name, icon, color, monthly_budget)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO categories (name, icon, color, monthly_budget, user_id)
+                    VALUES (?, ?, ?, ?, 1)
                 """, (cat["name"], cat["icon"], cat["color"], cat["budget"]))
         
         # Seed sample expenses if none exist
-        cursor.execute("SELECT COUNT(*) FROM expenses")
+        cursor.execute("SELECT COUNT(*) FROM expenses WHERE user_id = 1")
         if cursor.fetchone()[0] == 0 and seed_sample_data:
             _seed_sample_expenses(conn)
             
@@ -174,10 +241,105 @@ def set_currency(code, symbol):
     set_setting("currency_code", code)
     set_setting("currency_symbol", symbol)
 
+# ==================== User & Authentication Operations ====================
+
+def create_user(username, password, email=""):
+    """
+    Creates a new user account, generates 12 recovery keywords,
+    hashes the credentials, and initializes default categories.
+    Returns: dict with user_id, username, recovery_words, recovery_phrase
+    """
+    clean_username = username.strip()
+    clean_email = (email or "").strip()
+    
+    if len(clean_username) < 3:
+        raise ValueError("Username must be at least 3 characters long.")
+    if len(password) < 6:
+        raise ValueError("Password must be at least 6 characters long.")
+        
+    words, phrase = auth_service.generate_recovery_phrase(12)
+    pwd_hash = auth_service.hash_password(password)
+    phrase_hash = auth_service.hash_phrase(phrase)
+    
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO users (username, email, password_hash, recovery_phrase_hash)
+                VALUES (?, ?, ?, ?)
+            """, (clean_username, clean_email, pwd_hash, phrase_hash))
+            user_id = cursor.lastrowid
+        except sqlite3.IntegrityError:
+            raise ValueError(f"Username '{clean_username}' is already taken. Please choose another.")
+            
+        # Seed default categories for this new user
+        for cat in DEFAULT_CATEGORIES:
+            cursor.execute("""
+                INSERT OR IGNORE INTO categories (name, icon, color, monthly_budget, user_id)
+                VALUES (?, ?, ?, ?, ?)
+            """, (cat["name"], cat["icon"], cat["color"], cat["budget"], user_id))
+            
+        return {
+            "id": user_id,
+            "username": clean_username,
+            "recovery_words": words,
+            "recovery_phrase": phrase
+        }
+
+def get_user_by_id(user_id):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, email, created_at FROM users WHERE id = ?", (user_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def get_user_by_username(username):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE LOWER(username) = LOWER(?)", (username.strip(),))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def authenticate_user(username, password):
+    """Verifies credentials. Returns user dict on success, None on failure."""
+    user = get_user_by_username(username)
+    if not user:
+        return None
+    if auth_service.verify_password(user["password_hash"], password):
+        return {
+            "id": user["id"],
+            "username": user["username"],
+            "email": user["email"]
+        }
+    return None
+
+def recover_user_password(username, candidate_phrase, new_password):
+    """
+    Verifies candidate recovery phrase and resets password.
+    Raises ValueError on invalid credentials or phrase mismatch.
+    """
+    user = get_user_by_username(username)
+    if not user:
+        raise ValueError("User not found.")
+        
+    if len(new_password) < 6:
+        raise ValueError("New password must be at least 6 characters long.")
+        
+    if not auth_service.verify_phrase(user["recovery_phrase_hash"], candidate_phrase):
+        raise ValueError("Invalid recovery keywords. Please verify the phrase and try again.")
+        
+    new_pwd_hash = auth_service.hash_password(new_password)
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_pwd_hash, user["id"]))
+        conn.commit()
+    return True
+
 # ==================== Category Operations ====================
 
-def get_categories():
-    """Returns all categories with their budget and current month spend."""
+def get_categories(user_id=1):
+    """Returns all categories with their budget and current month spend for a specific user."""
+    user_id = user_id or 1
     current_month = date.today().strftime("%Y-%m")
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -186,97 +348,137 @@ def get_categories():
                    COALESCE(SUM(e.amount), 0) AS current_month_spent,
                    COUNT(e.id) AS total_expense_count
             FROM categories c
-            LEFT JOIN expenses e ON c.id = e.category_id AND strftime('%Y-%m', e.date) = ?
+            LEFT JOIN expenses e ON c.id = e.category_id 
+                                 AND strftime('%Y-%m', e.date) = ? 
+                                 AND e.user_id = ?
+            WHERE c.user_id = ?
             GROUP BY c.id
             ORDER BY c.name ASC
-        """, (current_month,))
+        """, (current_month, user_id, user_id))
         return [dict(row) for row in cursor.fetchall()]
 
-def get_category_by_id(cat_id):
+def get_category_by_id(cat_id, user_id=None):
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM categories WHERE id = ?", (cat_id,))
+        if user_id:
+            cursor.execute("SELECT * FROM categories WHERE id = ? AND user_id = ?", (cat_id, user_id))
+        else:
+            cursor.execute("SELECT * FROM categories WHERE id = ?", (cat_id,))
         row = cursor.fetchone()
         return dict(row) if row else None
 
-def add_category(name, icon, color, monthly_budget):
+def add_category(name, icon, color, monthly_budget, user_id=1):
+    user_id = user_id or 1
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO categories (name, icon, color, monthly_budget)
-            VALUES (?, ?, ?, ?)
-        """, (name.strip(), icon.strip(), color.strip(), float(monthly_budget or 0.0)))
+            INSERT INTO categories (name, icon, color, monthly_budget, user_id)
+            VALUES (?, ?, ?, ?, ?)
+        """, (name.strip(), icon.strip(), color.strip(), float(monthly_budget or 0.0), user_id))
         conn.commit()
         return cursor.lastrowid
 
-def update_category(cat_id, name, icon, color, monthly_budget):
+def update_category(cat_id, name, icon, color, monthly_budget, user_id=None):
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE categories 
-            SET name = ?, icon = ?, color = ?, monthly_budget = ?
-            WHERE id = ?
-        """, (name.strip(), icon.strip(), color.strip(), float(monthly_budget or 0.0), cat_id))
+        if user_id:
+            cursor.execute("""
+                UPDATE categories 
+                SET name = ?, icon = ?, color = ?, monthly_budget = ?
+                WHERE id = ? AND user_id = ?
+            """, (name.strip(), icon.strip(), color.strip(), float(monthly_budget or 0.0), cat_id, user_id))
+        else:
+            cursor.execute("""
+                UPDATE categories 
+                SET name = ?, icon = ?, color = ?, monthly_budget = ?
+                WHERE id = ?
+            """, (name.strip(), icon.strip(), color.strip(), float(monthly_budget or 0.0), cat_id))
         conn.commit()
         return cursor.rowcount > 0
 
-def delete_category(cat_id):
+def delete_category(cat_id, user_id=None):
     with get_connection() as conn:
         cursor = conn.cursor()
         # Check if expenses exist for this category
-        cursor.execute("SELECT COUNT(*) FROM expenses WHERE category_id = ?", (cat_id,))
+        if user_id:
+            cursor.execute("SELECT COUNT(*) FROM expenses WHERE category_id = ? AND user_id = ?", (cat_id, user_id))
+        else:
+            cursor.execute("SELECT COUNT(*) FROM expenses WHERE category_id = ?", (cat_id,))
+            
         if cursor.fetchone()[0] > 0:
             raise ValueError("Cannot delete category with associated expenses. Please reassign or delete them first.")
-        cursor.execute("DELETE FROM categories WHERE id = ?", (cat_id,))
+            
+        if user_id:
+            cursor.execute("DELETE FROM categories WHERE id = ? AND user_id = ?", (cat_id, user_id))
+        else:
+            cursor.execute("DELETE FROM categories WHERE id = ?", (cat_id,))
         conn.commit()
         return cursor.rowcount > 0
 
 # ==================== Expense Operations ====================
 
-def add_expense(expense_date, category_id, amount, payment_method, description, notes=""):
+def add_expense(expense_date, category_id, amount, payment_method, description, notes="", user_id=1):
+    user_id = user_id or 1
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO expenses (date, category_id, amount, payment_method, description, notes)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (expense_date, int(category_id), float(amount), payment_method.strip(), description.strip(), (notes or "").strip()))
+            INSERT INTO expenses (date, category_id, amount, payment_method, description, notes, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (expense_date, int(category_id), float(amount), payment_method.strip(), description.strip(), (notes or "").strip(), user_id))
         conn.commit()
         return cursor.lastrowid
 
-def update_expense(expense_id, expense_date, category_id, amount, payment_method, description, notes=""):
+def update_expense(expense_id, expense_date, category_id, amount, payment_method, description, notes="", user_id=None):
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE expenses
-            SET date = ?, category_id = ?, amount = ?, payment_method = ?, description = ?, notes = ?
-            WHERE id = ?
-        """, (expense_date, int(category_id), float(amount), payment_method.strip(), description.strip(), (notes or "").strip(), expense_id))
+        if user_id:
+            cursor.execute("""
+                UPDATE expenses
+                SET date = ?, category_id = ?, amount = ?, payment_method = ?, description = ?, notes = ?
+                WHERE id = ? AND user_id = ?
+            """, (expense_date, int(category_id), float(amount), payment_method.strip(), description.strip(), (notes or "").strip(), expense_id, user_id))
+        else:
+            cursor.execute("""
+                UPDATE expenses
+                SET date = ?, category_id = ?, amount = ?, payment_method = ?, description = ?, notes = ?
+                WHERE id = ?
+            """, (expense_date, int(category_id), float(amount), payment_method.strip(), description.strip(), (notes or "").strip(), expense_id))
         conn.commit()
         return cursor.rowcount > 0
 
-def delete_expense(expense_id):
+def delete_expense(expense_id, user_id=None):
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
+        if user_id:
+            cursor.execute("DELETE FROM expenses WHERE id = ? AND user_id = ?", (expense_id, user_id))
+        else:
+            cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
         conn.commit()
         return cursor.rowcount > 0
 
-def get_expense_by_id(expense_id):
+def get_expense_by_id(expense_id, user_id=None):
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
+        query = """
             SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color
             FROM expenses e
             JOIN categories c ON e.category_id = c.id
             WHERE e.id = ?
-        """, (expense_id,))
+        """
+        params = [expense_id]
+        if user_id:
+            query += " AND e.user_id = ?"
+            params.append(user_id)
+            
+        cursor.execute(query, params)
         row = cursor.fetchone()
         return dict(row) if row else None
 
-def get_expenses(start_date=None, end_date=None, category_id=None, payment_method=None, search=None, limit=None, offset=0):
-    """Filtered list of expenses with joined category info."""
-    conditions = []
-    params = []
+def get_expenses(start_date=None, end_date=None, category_id=None, payment_method=None, search=None, limit=None, offset=0, user_id=1):
+    """Filtered list of expenses for a specific user with joined category info."""
+    user_id = user_id or 1
+    conditions = ["e.user_id = ?"]
+    params = [user_id]
     
     if start_date:
         conditions.append("e.date >= ?")
@@ -295,7 +497,7 @@ def get_expenses(start_date=None, end_date=None, category_id=None, payment_metho
         search_param = f"%{search}%"
         params.extend([search_param, search_param])
         
-    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    where_clause = f"WHERE {' AND '.join(conditions)}"
     
     query = f"""
         SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color
@@ -314,9 +516,10 @@ def get_expenses(start_date=None, end_date=None, category_id=None, payment_metho
         cursor.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
 
-def count_expenses(start_date=None, end_date=None, category_id=None, payment_method=None, search=None):
-    conditions = []
-    params = []
+def count_expenses(start_date=None, end_date=None, category_id=None, payment_method=None, search=None, user_id=1):
+    user_id = user_id or 1
+    conditions = ["user_id = ?"]
+    params = [user_id]
     if start_date:
         conditions.append("date >= ?")
         params.append(start_date)
@@ -334,7 +537,7 @@ def count_expenses(start_date=None, end_date=None, category_id=None, payment_met
         search_param = f"%{search}%"
         params.extend([search_param, search_param])
         
-    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    where_clause = f"WHERE {' AND '.join(conditions)}"
     query = f"SELECT COUNT(*) FROM expenses {where_clause}"
     
     with get_connection() as conn:
@@ -344,23 +547,12 @@ def count_expenses(start_date=None, end_date=None, category_id=None, payment_met
 
 # ==================== Reporting & Analytics Operations ====================
 
-def get_monthly_metrics(month_str=None):
-    """
-    month_str: 'YYYY-MM'. Defaults to current month.
-    Returns:
-      - total_spend
-      - prev_month_spend
-      - total_budget
-      - top_category
-      - largest_expense
-      - expense_count
-      - daily_average
-    """
+def get_monthly_metrics(month_str=None, user_id=1):
+    user_id = user_id or 1
     if not month_str:
         month_str = date.today().strftime("%Y-%m")
         
     year, month = map(int, month_str.split("-"))
-    # Compute previous month
     if month == 1:
         prev_month_str = f"{year - 1}-12"
     else:
@@ -375,8 +567,8 @@ def get_monthly_metrics(month_str=None):
                    COUNT(id) as count,
                    COALESCE(MAX(amount), 0) as max_expense
             FROM expenses
-            WHERE strftime('%Y-%m', date) = ?
-        """, (month_str,))
+            WHERE strftime('%Y-%m', date) = ? AND user_id = ?
+        """, (month_str, user_id))
         cur_row = cursor.fetchone()
         total_spend = cur_row["total"]
         expense_count = cur_row["count"]
@@ -386,12 +578,12 @@ def get_monthly_metrics(month_str=None):
         cursor.execute("""
             SELECT COALESCE(SUM(amount), 0) as total
             FROM expenses
-            WHERE strftime('%Y-%m', date) = ?
-        """, (prev_month_str,))
+            WHERE strftime('%Y-%m', date) = ? AND user_id = ?
+        """, (prev_month_str, user_id))
         prev_month_spend = cursor.fetchone()["total"]
         
         # Total Monthly Budget
-        cursor.execute("SELECT COALESCE(SUM(monthly_budget), 0) as total_budget FROM categories")
+        cursor.execute("SELECT COALESCE(SUM(monthly_budget), 0) as total_budget FROM categories WHERE user_id = ?", (user_id,))
         total_budget = cursor.fetchone()["total_budget"]
         
         # Top Category this month
@@ -399,20 +591,18 @@ def get_monthly_metrics(month_str=None):
             SELECT c.name, SUM(e.amount) as cat_spend
             FROM expenses e
             JOIN categories c ON e.category_id = c.id
-            WHERE strftime('%Y-%m', e.date) = ?
+            WHERE strftime('%Y-%m', e.date) = ? AND e.user_id = ?
             GROUP BY c.id
             ORDER BY cat_spend DESC
             LIMIT 1
-        """, (month_str,))
+        """, (month_str, user_id))
         top_cat_row = cursor.fetchone()
         top_category = top_cat_row["name"] if top_cat_row else "None"
         
-        # Days in month passed or total days
         today = date.today()
         if today.strftime("%Y-%m") == month_str:
             days_counted = max(1, today.day)
         else:
-            # Full month days
             import calendar
             days_counted = calendar.monthrange(year, month)[1]
             
@@ -430,8 +620,8 @@ def get_monthly_metrics(month_str=None):
             "daily_average": round(daily_average, 2),
         }
 
-def get_category_breakdown(month_str=None):
-    """Returns spending per category for a given month with budget status."""
+def get_category_breakdown(month_str=None, user_id=1):
+    user_id = user_id or 1
     if not month_str:
         month_str = date.today().strftime("%Y-%m")
         
@@ -442,10 +632,13 @@ def get_category_breakdown(month_str=None):
                    COALESCE(SUM(e.amount), 0) as spent,
                    COUNT(e.id) as transaction_count
             FROM categories c
-            LEFT JOIN expenses e ON c.id = e.category_id AND strftime('%Y-%m', e.date) = ?
+            LEFT JOIN expenses e ON c.id = e.category_id 
+                                 AND strftime('%Y-%m', e.date) = ? 
+                                 AND e.user_id = ?
+            WHERE c.user_id = ?
             GROUP BY c.id
             ORDER BY spent DESC, c.name ASC
-        """, (month_str,))
+        """, (month_str, user_id, user_id))
         rows = [dict(r) for r in cursor.fetchall()]
         
         total_spent = sum(r["spent"] for r in rows)
@@ -456,8 +649,8 @@ def get_category_breakdown(month_str=None):
             r["remaining_budget"] = round(r["monthly_budget"] - r["spent"], 2)
         return rows
 
-def get_daily_spending_trend(month_str=None):
-    """Returns day-by-day spending for a specific month."""
+def get_daily_spending_trend(month_str=None, user_id=1):
+    user_id = user_id or 1
     if not month_str:
         month_str = date.today().strftime("%Y-%m")
         
@@ -470,10 +663,10 @@ def get_daily_spending_trend(month_str=None):
         cursor.execute("""
             SELECT strftime('%d', date) as day, SUM(amount) as total
             FROM expenses
-            WHERE strftime('%Y-%m', date) = ?
+            WHERE strftime('%Y-%m', date) = ? AND user_id = ?
             GROUP BY day
             ORDER BY day ASC
-        """, (month_str,))
+        """, (month_str, user_id))
         spending_by_day = {int(row["day"]): row["total"] for row in cursor.fetchall()}
         
         labels = [f"{day:02d}" for day in range(1, num_days + 1)]
@@ -485,12 +678,11 @@ def get_daily_spending_trend(month_str=None):
             "month": month_str
         }
 
-def get_monthly_history(num_months=6):
-    """Returns total spending for the last N months."""
+def get_monthly_history(num_months=6, user_id=1):
+    user_id = user_id or 1
     today = date.today()
     months = []
     
-    # Generate list of past N months
     for i in range(num_months - 1, -1, -1):
         year = today.year
         month = today.month - i
@@ -506,11 +698,10 @@ def get_monthly_history(num_months=6):
             cursor.execute("""
                 SELECT COALESCE(SUM(amount), 0) as total
                 FROM expenses
-                WHERE strftime('%Y-%m', date) = ?
-            """, (m,))
+                WHERE strftime('%Y-%m', date) = ? AND user_id = ?
+            """, (m, user_id))
             total = cursor.fetchone()["total"]
             
-            # Format label, e.g. "Oct 2026"
             dt = datetime.strptime(m, "%Y-%m")
             label = dt.strftime("%b %Y")
             results.append({
@@ -521,8 +712,8 @@ def get_monthly_history(num_months=6):
             
         return results
 
-def get_payment_method_breakdown(month_str=None):
-    """Returns spending grouped by payment method for a month."""
+def get_payment_method_breakdown(month_str=None, user_id=1):
+    user_id = user_id or 1
     if not month_str:
         month_str = date.today().strftime("%Y-%m")
         
@@ -531,17 +722,17 @@ def get_payment_method_breakdown(month_str=None):
         cursor.execute("""
             SELECT payment_method, SUM(amount) as total, COUNT(id) as count
             FROM expenses
-            WHERE strftime('%Y-%m', date) = ?
+            WHERE strftime('%Y-%m', date) = ? AND user_id = ?
             GROUP BY payment_method
             ORDER BY total DESC
-        """, (month_str,))
+        """, (month_str, user_id))
         return [dict(r) for r in cursor.fetchall()]
 
-def get_available_months():
-    """Returns distinct list of YYYY-MM months that have expenses."""
+def get_available_months(user_id=1):
+    user_id = user_id or 1
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT DISTINCT strftime('%Y-%m', date) as m FROM expenses ORDER BY m DESC")
+        cursor.execute("SELECT DISTINCT strftime('%Y-%m', date) as m FROM expenses WHERE user_id = ? ORDER BY m DESC", (user_id,))
         months = [r["m"] for r in cursor.fetchall() if r["m"]]
         current = date.today().strftime("%Y-%m")
         if current not in months:

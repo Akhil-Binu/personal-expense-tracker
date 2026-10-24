@@ -14,6 +14,53 @@ class ExpenseTrackerTestCase(unittest.TestCase):
         app.config["TESTING"] = True
         self.client = app.test_client()
         database.init_db(seed_sample_data=True)
+        # Log in as default user 1 for dashboard tests
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = 1
+
+    def test_account_creation_and_recovery(self):
+        """Test user registration, recovery phrase generation, and account recovery."""
+        # Log out for registration
+        with self.client.session_transaction() as sess:
+            sess.clear()
+
+        # 1. Register a new user
+        res_reg = self.client.post("/register", data={
+            "username": "alice_finance",
+            "email": "alice@example.com",
+            "password": "originalPassword123",
+            "confirm_password": "originalPassword123"
+        })
+        self.assertEqual(res_reg.status_code, 200)
+        self.assertIn(b"Save Your Backup Keywords", res_reg.data)
+        self.assertIn(b"alice_finance", res_reg.data)
+
+        # 2. Verify user in database
+        alice = database.get_user_by_username("alice_finance")
+        self.assertIsNotNone(alice)
+
+        # 3. Test invalid login
+        self.assertIsNone(database.authenticate_user("alice_finance", "wrongPassword"))
+        # Test valid login
+        self.assertIsNotNone(database.authenticate_user("alice_finance", "originalPassword123"))
+
+        # 4. Perform direct recovery using generated phrase via create_user
+        user_data = database.create_user("bob_crypto", "initialPassword")
+        phrase = user_data["recovery_phrase"]
+        self.assertEqual(len(user_data["recovery_words"]), 12)
+
+        # 5. Recover bob_crypto's password with recovery phrase
+        res_rec = self.client.post("/recover", data={
+            "username": "bob_crypto",
+            "recovery_phrase": phrase,
+            "new_password": "brandNewPassword789",
+            "confirm_password": "brandNewPassword789"
+        }, follow_redirects=True)
+        self.assertEqual(res_rec.status_code, 200)
+
+        # Verify old password fails and new password succeeds
+        self.assertIsNone(database.authenticate_user("bob_crypto", "initialPassword"))
+        self.assertIsNotNone(database.authenticate_user("bob_crypto", "brandNewPassword789"))
 
     def test_pages_render_successfully(self):
         """Test all 4 main views load with 200 OK."""
