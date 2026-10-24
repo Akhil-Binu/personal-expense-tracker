@@ -37,8 +37,8 @@
                 </div>
             </div>
 
-            <!-- Row 2: Category, Payment Method, and Date Pickers -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+            <!-- Row 2: Category, Bank Account, Payment Method, and Date Pickers -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 pt-1 border-t border-slate-100 dark:border-slate-800/80">
                 <!-- Category Select -->
                 <div>
                     <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Category</label>
@@ -52,11 +52,24 @@
                     </select>
                 </div>
 
+                <!-- Bank Account Select -->
+                <div>
+                    <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Bank Account</label>
+                    <select name="account_id" onchange="this.form.submit()" class="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-teal-500 outline-none">
+                        <option value="">All Accounts</option>
+                        {% for acc in accounts %}
+                        <option value="{{ acc.id }}" {% if filters.account_id == acc.id %}selected{% endif %}>
+                            {{ acc.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
                 <!-- Payment Method Select -->
                 <div>
                     <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Payment Method</label>
                     <select name="payment_method" onchange="this.form.submit()" class="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-teal-500 outline-none">
-                        <option value="">All Payment Methods</option>
+                        <option value="">All Methods</option>
                         <option value="Credit Card" {% if filters.payment_method == 'Credit Card' %}selected{% endif %}>Credit Card</option>
                         <option value="Debit Card" {% if filters.payment_method == 'Debit Card' %}selected{% endif %}>Debit Card</option>
                         <option value="UPI / Digital Wallet" {% if filters.payment_method == 'UPI / Digital Wallet' %}selected{% endif %}>UPI / Digital Wallet</option>
@@ -79,7 +92,7 @@
             </div>
 
             <!-- Active Filter Badges & Reset -->
-            {% if filters.search or filters.category_id or filters.payment_method or filters.start_date or filters.end_date %}
+            {% if filters.search or filters.category_id or filters.account_id or filters.payment_method or filters.start_date or filters.end_date %}
             <div class="flex items-center justify-between pt-1">
                 <span class="text-xs text-slate-500 dark:text-slate-400">
                     Showing filtered results
@@ -144,9 +157,17 @@
                             {% endif %}
                         </td>
                         <td class="py-3.5 px-5 whitespace-nowrap">
-                            <span class="text-xs px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
-                                {{ exp.payment_method }}
-                            </span>
+                            <div class="flex flex-col space-y-0.5">
+                                <span class="text-xs px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium w-fit">
+                                    {{ exp.payment_method }}
+                                </span>
+                                {% if exp.account_name %}
+                                <span class="text-[10px] text-teal-600 dark:text-teal-400 font-medium flex items-center">
+                                    <i class="fa-solid fa-building-columns mr-1 text-[9px]"></i>
+                                    {{ exp.account_name }}
+                                </span>
+                                {% endif %}
+                            </div>
                         </td>
                         <td class="py-3.5 px-5 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
                             {{ currency.symbol }}{{ "%.2f"|format(exp.amount) }}
@@ -195,7 +216,7 @@
                     <span class="font-bold text-sm text-slate-900 dark:text-white">
                         {{ currency.symbol }}{{ "%.2f"|format(exp.amount) }}
                     </span>
-                    <span class="text-[10px] text-slate-400 mb-1">{{ exp.payment_method }}</span>
+                    <span class="text-[10px] text-slate-400 mb-1">{{ exp.payment_method }}{% if exp.account_name %} &bull; {{ exp.account_name }}{% endif %}</span>
                     <div class="flex items-center space-x-2">
                         <button onclick="editExpense({{ exp.id }})" class="text-slate-400 hover:text-teal-600 p-1">
                             <i class="fa-solid fa-pen text-xs"></i>

@@ -20,11 +20,12 @@ Track daily spending, categorize transactions, set category budgets, explore vis
 
 ## 📸 Key Highlights
 
+- 🏛️ **Multi-Bank Accounts & Combined Net Balance**: Add different bank accounts (e.g. *Main Checking, High-Yield Savings, Digital Wallet / UPI, Brokerage*), track custom starting balances, and automatically aggregate all funds into **one combined net financial balance**. When logging expenses, optionally specify which bank account paid for it to track deductions in real-time.
 - 🔐 **Account Creation & 12-Word Mnemonic Backup**: Create private user accounts with decentralized 12-word backup recovery phrases (BIP-39 style). If you ever forget your password, your 12 keywords allow instant account recovery and password reset.
 - 📱 **Mobile, Tablet & Desktop Web App**: Native app feel with a bottom navigation bar and floating `+` action button on mobile, adaptive 2-column cards on tablet, and a wide analytics sidebar dashboard on desktop.
 - 💵 **Multi-Currency Support**: Instant 1-click currency switching across **10+ currencies** (`USD $`, `INR ₹`, `EUR €`, `GBP £`, `JPY ¥`, `CAD C$`, `AUD A$`, `AED`, `SGD S$`, `CHF`), updating charts, tables, budgets, and Excel exports dynamically.
 - 📊 **Interactive Financial Analytics**: Chart.js graphs for category distribution (doughnut), daily spending trends (bar), 6-month historical comparison, and payment method share.
-- 📑 **Executive Excel Integration**: Export formatted multi-tab `.xlsx` workbooks with live Excel formulas (`=SUM(...)`), currency formatting, zebra striping, and auto-filters.
+- 📑 **Executive Excel Integration**: Export formatted multi-tab `.xlsx` workbooks with live Excel formulas (`=SUM(...)`), currency formatting, zebra striping, auto-filters, and a dedicated **Bank Accounts & Combined Net Balance** sheet.
 - 📥 **Spreadsheet Import & Template**: Bulk import expenses from Excel spreadsheets with automatic category mapping and validation.
 - 🎯 **Category & Budget Management**: Track monthly budgets with visual progress meters and alert thresholds (*On Track*, *Near Limit >80%*, *Over Budget >100%*).
 - 🌓 **Dark / Light Mode**: Instant theme switching with persistent state and chart palette synchronization.
@@ -144,14 +145,12 @@ FinanceFlow includes a comprehensive unit test suite covering routes, JSON APIs,
 
 Output:
 ```
-........
+..........
 ----------------------------------------------------------------------
-Ran 8 tests in 0.308s
+Ran 10 tests in 1.838s
 
 OK
 ```
-
----
 
 ---
 
@@ -175,6 +174,17 @@ FinanceFlow includes user authentication designed for privacy and resilience:
 
 ---
 
+## 🏛️ Multi-Bank Account Management & Combined Net Balance
+
+FinanceFlow includes comprehensive bank account tracking:
+- **Multiple Bank Accounts**: Add checking, high-yield savings, digital wallets / UPI, or brokerage accounts with starting balances and masked account numbers.
+- **Combined Net Balance**: View an aggregated real-time calculation of your total combined net balance in one consolidated hero view across all accounts.
+- **Transaction Linking**: When recording or importing expenses, select the bank account to automatically deduct expenses from that specific account.
+- **Aggregated Types Breakdown**: Filter and view combined balances grouped by account type (*Checking, Savings, Digital Wallets*).
+- **Excel Export Inclusion**: Detailed bank account records and combined sums are exported in a dedicated sheet in the `.xlsx` export.
+
+---
+
 ## 📁 Repository Structure
 
 ```
@@ -184,7 +194,7 @@ personal-expense-tracker/
 ├── database.py           # SQLite connection, multi-user schema & transactional queries
 ├── excel_service.py      # openpyxl formatted workbook generator & parser
 ├── run.py                # Smart launcher with local LAN IP resolution
-├── test_app.py           # Comprehensive unit tests (all 9 tests passing)
+├── test_app.py           # Comprehensive unit tests (all 10 tests passing)
 ├── requirements.txt      # Frozen pip dependencies
 ├── .gitignore            # Git exclusion rules
 ├── LICENSE               # MIT License
@@ -192,14 +202,15 @@ personal-expense-tracker/
 │   ├── css/
 │   │   └── style.css     # Responsive styles, mobile touch rules, toast animations
 │   └── js/
-│       └── app.js        # Theme manager, Chart.js renderers, modals, currency API
+│       └── app.js        # Theme manager, Chart.js renderers, modals, currency API, accounts
 └── templates/
     ├── base.html         # Responsive base layout (Desktop sidebar + Mobile bottom nav)
     ├── login.html        # Clean login interface with recovery link
     ├── register.html     # Account creation interface
     ├── backup_keywords.html # 12-word mnemonic keywords presentation card
     ├── recover.html      # Account recovery & password reset using 12 keywords
-    ├── index.html        # Main dashboard (KPI cards, charts, recent transactions)
+    ├── index.html        # Main dashboard (Combined Balance banner, KPI cards, charts)
+    ├── accounts.html     # Bank Accounts & Combined Net Balance management view
     ├── expenses.html     # Expenses table, advanced filters, search & Excel export
     ├── reports.html      # Monthly reports, 4 interactive charts, variance table
     └── categories.html   # Category budgets, limits & progress bars

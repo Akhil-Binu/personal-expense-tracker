@@ -58,6 +58,8 @@ def inject_global_data():
         "today_display": today.strftime("%A, %B %d, %Y"),
         "available_months": database.get_available_months(user_id=user_id),
         "categories_list": database.get_categories(user_id=user_id),
+        "bank_accounts_list": database.get_bank_accounts(user_id=user_id),
+        "combined_bank_balance": database.get_combined_balance(user_id=user_id),
         "currency": database.get_currency(),
         "supported_currencies": SUPPORTED_CURRENCIES,
     }
@@ -184,6 +186,8 @@ def expenses_page():
     end_date = request.args.get("end_date")
     category_id = request.args.get("category_id")
     category_id = int(category_id) if category_id and category_id.isdigit() else None
+    account_id = request.args.get("account_id")
+    account_id = int(account_id) if account_id and account_id.isdigit() else None
     payment_method = request.args.get("payment_method") or None
     search = request.args.get("search") or None
     
@@ -193,19 +197,23 @@ def expenses_page():
         category_id=category_id,
         payment_method=payment_method,
         search=search,
-        user_id=user_id
+        user_id=user_id,
+        account_id=account_id
     )
     categories = database.get_categories(user_id=user_id)
+    accounts = database.get_bank_accounts(user_id=user_id)
     total_amount = sum(e["amount"] for e in expenses)
     
     return render_template(
         "expenses.html",
         expenses=expenses,
         categories=categories,
+        accounts=accounts,
         filters={
             "start_date": start_date or "",
             "end_date": end_date or "",
             "category_id": category_id or "",
+            "account_id": account_id or "",
             "payment_method": payment_method or "",
             "search": search or ""
         },
@@ -248,6 +256,21 @@ def categories_page():
         total_budget=round(total_budget, 2),
         total_spent=round(total_spent, 2),
         active_page="categories"
+    )
+
+@app.route("/accounts")
+@login_required
+def accounts_page():
+    """Bank accounts and combined net balance management view."""
+    user = get_current_user()
+    user_id = user["id"]
+    accounts = database.get_bank_accounts(user_id=user_id)
+    combined = database.get_combined_balance(user_id=user_id)
+    return render_template(
+        "accounts.html",
+        accounts=accounts,
+        combined=combined,
+        active_page="accounts"
     )
 
 # ==================== JSON API Endpoints ====================
@@ -295,6 +318,8 @@ def api_add_expense():
         payment_method = data.get("payment_method", "Cash")
         description = data.get("description", "").strip()
         notes = data.get("notes", "").strip()
+        account_id = data.get("account_id")
+        account_id = int(account_id) if account_id and str(account_id).isdigit() else None
         
         if not description:
             return jsonify({"success": False, "error": "Description is required"}), 400
@@ -308,7 +333,8 @@ def api_add_expense():
             payment_method=payment_method,
             description=description,
             notes=notes,
-            user_id=user_id
+            user_id=user_id,
+            account_id=account_id
         )
         return jsonify({"success": True, "id": expense_id, "message": "Expense added successfully!"})
     except Exception as e:
@@ -337,6 +363,8 @@ def api_update_expense(expense_id):
         payment_method = data.get("payment_method")
         description = data.get("description", "").strip()
         notes = data.get("notes", "").strip()
+        account_id = data.get("account_id")
+        account_id = int(account_id) if account_id and str(account_id).isdigit() else None
         
         if not description:
             return jsonify({"success": False, "error": "Description is required"}), 400
@@ -351,7 +379,8 @@ def api_update_expense(expense_id):
             payment_method=payment_method,
             description=description,
             notes=notes,
-            user_id=user["id"]
+            user_id=user["id"],
+            account_id=account_id
         )
         if not updated:
             return jsonify({"success": False, "error": "Expense not found"}), 404
@@ -369,6 +398,94 @@ def api_delete_expense(expense_id):
         if not deleted:
             return jsonify({"success": False, "error": "Expense not found"}), 404
         return jsonify({"success": True, "message": "Expense deleted successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+# ==================== Bank Account APIs ====================
+
+@app.route("/api/account", methods=["POST"])
+@login_required
+def api_add_account():
+    """Create a new bank account."""
+    user = get_current_user()
+    data = request.get_json() if request.is_json else request.form
+    try:
+        name = data.get("name", "").strip()
+        account_type = data.get("account_type", "Checking").strip()
+        initial_balance = float(data.get("initial_balance") or 0.0)
+        account_number = data.get("account_number", "").strip()
+        color = data.get("color", "#0D9488").strip()
+        icon = data.get("icon", "building-columns").strip()
+
+        if not name:
+            return jsonify({"success": False, "error": "Account name is required"}), 400
+
+        acc_id = database.add_bank_account(
+            name=name,
+            account_type=account_type,
+            initial_balance=initial_balance,
+            account_number=account_number,
+            color=color,
+            icon=icon,
+            user_id=user["id"]
+        )
+        return jsonify({"success": True, "id": acc_id, "message": "Bank account created successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route("/api/account/<int:account_id>", methods=["GET"])
+@login_required
+def api_get_account(account_id):
+    """Retrieve details for a single bank account."""
+    user = get_current_user()
+    acc = database.get_bank_account_by_id(account_id, user_id=user["id"])
+    if not acc:
+        return jsonify({"success": False, "error": "Bank account not found"}), 404
+    return jsonify({"success": True, "account": acc})
+
+@app.route("/api/account/<int:account_id>", methods=["PUT", "POST"])
+@login_required
+def api_update_account(account_id):
+    """Update an existing bank account."""
+    user = get_current_user()
+    data = request.get_json() if request.is_json else request.form
+    try:
+        name = data.get("name", "").strip()
+        account_type = data.get("account_type", "Checking").strip()
+        initial_balance = float(data.get("initial_balance") or 0.0)
+        account_number = data.get("account_number", "").strip()
+        color = data.get("color", "#0D9488").strip()
+        icon = data.get("icon", "building-columns").strip()
+
+        if not name:
+            return jsonify({"success": False, "error": "Account name is required"}), 400
+
+        updated = database.update_bank_account(
+            account_id=account_id,
+            name=name,
+            account_type=account_type,
+            initial_balance=initial_balance,
+            account_number=account_number,
+            color=color,
+            icon=icon,
+            user_id=user["id"]
+        )
+        if not updated:
+            return jsonify({"success": False, "error": "Bank account not found"}), 404
+        return jsonify({"success": True, "message": "Bank account updated successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route("/api/account/<int:account_id>/delete", methods=["POST", "DELETE"])
+@login_required
+def api_delete_account(account_id):
+    """Delete a bank account."""
+    user = get_current_user()
+    try:
+        deleted = database.delete_bank_account(account_id, user_id=user["id"])
+        if not deleted:
+            return jsonify({"success": False, "error": "Bank account not found"}), 404
+        return jsonify({"success": True, "message": "Bank account deleted successfully!"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
 

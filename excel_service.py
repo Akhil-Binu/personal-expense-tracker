@@ -236,13 +236,13 @@ def export_expenses_to_excel(month_str=None, category_id=None, payment_method=No
     ws_details.views.sheetView[0].showGridLines = True
     
     # Header Banner
-    headers = ["ID", "Date", "Category", "Description", "Payment Method", f"Amount ({currency_symbol})", "Notes"]
+    headers = ["ID", "Date", "Category", "Description", "Payment Method", "Bank Account", f"Amount ({currency_symbol})", "Notes"]
     ws_details.row_dimensions[1].height = 28
     for c_idx, h in enumerate(headers, start=1):
         cell = ws_details.cell(row=1, column=c_idx, value=h)
         cell.font = Font(name="Segoe UI", size=10, bold=True, color="FFFFFF")
         cell.fill = PatternFill(start_color=HEADER_BG, end_color=HEADER_BG, fill_type="solid")
-        cell.alignment = Alignment(horizontal="center" if c_idx in [1, 2, 5] else ("right" if c_idx == 6 else "left"), vertical="center")
+        cell.alignment = Alignment(horizontal="center" if c_idx in [1, 2, 5] else ("right" if c_idx == 7 else "left"), vertical="center")
         cell.border = THIN_BORDER
 
     # Fetch expenses with filters applied
@@ -271,15 +271,18 @@ def export_expenses_to_excel(month_str=None, category_id=None, payment_method=No
         
         c_pm = ws_details.cell(row=row_num, column=5, value=exp["payment_method"])
         c_pm.alignment = Alignment(horizontal="center", vertical="center")
+
+        c_bank = ws_details.cell(row=row_num, column=6, value=exp.get("account_name") or "—")
+        c_bank.alignment = Alignment(horizontal="left", vertical="center")
         
-        c_amt = ws_details.cell(row=row_num, column=6, value=exp["amount"])
+        c_amt = ws_details.cell(row=row_num, column=7, value=exp["amount"])
         c_amt.number_format = curr_fmt
         c_amt.alignment = Alignment(horizontal="right", vertical="center")
         
-        c_note = ws_details.cell(row=row_num, column=7, value=exp.get("notes") or "")
+        c_note = ws_details.cell(row=row_num, column=8, value=exp.get("notes") or "")
         c_note.alignment = Alignment(horizontal="left", vertical="center")
         
-        for c_idx in range(1, 8):
+        for c_idx in range(1, 9):
             cell = ws_details.cell(row=row_num, column=c_idx)
             cell.font = Font(name="Segoe UI", size=10)
             cell.fill = fill_style
@@ -290,19 +293,19 @@ def export_expenses_to_excel(month_str=None, category_id=None, payment_method=No
     # Total Row for Transactions
     if row_num > 2:
         ws_details.row_dimensions[row_num].height = 24
-        ws_details.cell(row=row_num, column=5, value="Total Spending").alignment = Alignment(horizontal="right", vertical="center")
-        c_tot = ws_details.cell(row=row_num, column=6, value=f"=SUM(F2:F{row_num-1})")
+        ws_details.cell(row=row_num, column=6, value="Total Spending").alignment = Alignment(horizontal="right", vertical="center")
+        c_tot = ws_details.cell(row=row_num, column=7, value=f"=SUM(G2:G{row_num-1})")
         c_tot.number_format = curr_fmt
         c_tot.alignment = Alignment(horizontal="right", vertical="center")
         
-        for c_idx in range(1, 8):
+        for c_idx in range(1, 9):
             cell = ws_details.cell(row=row_num, column=c_idx)
             cell.font = Font(name="Segoe UI", size=10, bold=True)
             cell.fill = PatternFill(start_color=TOTAL_BG, end_color=TOTAL_BG, fill_type="solid")
             cell.border = TOTAL_BORDER
             
     # Enable AutoFilter on Transactions
-    ws_details.auto_filter.ref = f"A1:G{max(2, row_num - 1)}"
+    ws_details.auto_filter.ref = f"A1:H{max(2, row_num - 1)}"
     
     # Adjust Detailed Columns Width
     col_widths = {
@@ -310,12 +313,88 @@ def export_expenses_to_excel(month_str=None, category_id=None, payment_method=No
         'B': 13,  # Date
         'C': 20,  # Category
         'D': 30,  # Description
-        'E': 20,  # Payment Method
-        'F': 16,  # Amount
-        'G': 28   # Notes
+        'E': 18,  # Payment Method
+        'F': 22,  # Bank Account
+        'G': 16,  # Amount
+        'H': 28   # Notes
     }
     for col_letter, width in col_widths.items():
         ws_details.column_dimensions[col_letter].width = width
+
+    # ----------------------------------------------------
+    # Sheet 3: Bank Accounts & Combined Net Balance
+    # ----------------------------------------------------
+    ws_banks = wb.create_sheet(title="Bank Accounts")
+    ws_banks.views.sheetView[0].showGridLines = True
+
+    bank_headers = ["Account ID", "Bank / Account Name", "Type", "Last 4", f"Starting Balance ({currency_symbol})", f"Total Deducted ({currency_symbol})", f"Current Net Balance ({currency_symbol})"]
+    ws_banks.row_dimensions[1].height = 28
+    for c_idx, h in enumerate(bank_headers, start=1):
+        cell = ws_banks.cell(row=1, column=c_idx, value=h)
+        cell.font = Font(name="Segoe UI", size=10, bold=True, color="FFFFFF")
+        cell.fill = PatternFill(start_color=HEADER_BG, end_color=HEADER_BG, fill_type="solid")
+        cell.alignment = Alignment(horizontal="center" if c_idx in [1, 3, 4] else ("right" if c_idx >= 5 else "left"), vertical="center")
+        cell.border = THIN_BORDER
+
+    bank_accounts = database.get_bank_accounts(user_id=user_id)
+    b_row = 2
+    for acc in bank_accounts:
+        ws_banks.row_dimensions[b_row].height = 20
+        is_zebra = (b_row % 2 == 0)
+        row_bg = ZEBRA_BG if is_zebra else "FFFFFF"
+        fill_style = PatternFill(start_color=row_bg, end_color=row_bg, fill_type="solid")
+
+        ws_banks.cell(row=b_row, column=1, value=acc["id"]).alignment = Alignment(horizontal="center", vertical="center")
+        ws_banks.cell(row=b_row, column=2, value=acc["name"]).alignment = Alignment(horizontal="left", vertical="center")
+        ws_banks.cell(row=b_row, column=3, value=acc["account_type"]).alignment = Alignment(horizontal="center", vertical="center")
+        ws_banks.cell(row=b_row, column=4, value=acc.get("account_number") or "—").alignment = Alignment(horizontal="center", vertical="center")
+
+        c_init = ws_banks.cell(row=b_row, column=5, value=acc["initial_balance"])
+        c_init.number_format = curr_fmt
+        c_init.alignment = Alignment(horizontal="right", vertical="center")
+
+        c_spent = ws_banks.cell(row=b_row, column=6, value=acc["total_spent"])
+        c_spent.number_format = curr_fmt
+        c_spent.alignment = Alignment(horizontal="right", vertical="center")
+
+        c_cur = ws_banks.cell(row=b_row, column=7, value=acc["current_balance"])
+        c_cur.number_format = curr_fmt
+        c_cur.alignment = Alignment(horizontal="right", vertical="center")
+
+        for c_idx in range(1, 8):
+            cell = ws_banks.cell(row=b_row, column=c_idx)
+            cell.font = Font(name="Segoe UI", size=10)
+            cell.fill = fill_style
+            cell.border = THIN_BORDER
+
+        b_row += 1
+
+    # Total Combined Row
+    if b_row > 2:
+        ws_banks.row_dimensions[b_row].height = 24
+        ws_banks.cell(row=b_row, column=4, value="Combined Total Net Balance:").alignment = Alignment(horizontal="right", vertical="center")
+        c_tot_init = ws_banks.cell(row=b_row, column=5, value=f"=SUM(E2:E{b_row-1})")
+        c_tot_init.number_format = curr_fmt
+        c_tot_init.alignment = Alignment(horizontal="right", vertical="center")
+
+        c_tot_spent = ws_banks.cell(row=b_row, column=6, value=f"=SUM(F2:F{b_row-1})")
+        c_tot_spent.number_format = curr_fmt
+        c_tot_spent.alignment = Alignment(horizontal="right", vertical="center")
+
+        c_tot_curr = ws_banks.cell(row=b_row, column=7, value=f"=SUM(G2:G{b_row-1})")
+        c_tot_curr.number_format = curr_fmt
+        c_tot_curr.alignment = Alignment(horizontal="right", vertical="center")
+
+        for c_idx in range(1, 8):
+            cell = ws_banks.cell(row=b_row, column=c_idx)
+            cell.font = Font(name="Segoe UI", size=10, bold=True)
+            cell.fill = PatternFill(start_color=TOTAL_BG, end_color=TOTAL_BG, fill_type="solid")
+            cell.border = TOTAL_BORDER
+
+    # Set column widths for bank accounts sheet
+    b_widths = {'A': 12, 'B': 28, 'C': 18, 'D': 14, 'E': 22, 'F': 22, 'G': 24}
+    for col_letter, width in b_widths.items():
+        ws_banks.column_dimensions[col_letter].width = width
 
     # Save to memory buffer
     output = io.BytesIO()

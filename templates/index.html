@@ -6,6 +6,37 @@
 {% block content %}
 <div class="space-y-6">
 
+    <!-- ==================== COMBINED BANK BALANCE BANNER ==================== -->
+    <div class="relative overflow-hidden bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-lg border border-teal-800/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div class="absolute -right-12 -top-12 w-48 h-48 bg-teal-500/15 rounded-full blur-2xl pointer-events-none"></div>
+        <div class="flex items-center space-x-3.5 relative z-10">
+            <div class="w-12 h-12 rounded-2xl bg-teal-500/20 text-teal-400 border border-teal-400/30 flex items-center justify-center text-lg flex-shrink-0">
+                <i class="fa-solid fa-building-columns"></i>
+            </div>
+            <div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-teal-400">Combined Bank Net Balance</span>
+                    <span class="text-[10px] font-bold bg-teal-900/80 text-teal-300 px-2 py-0.5 rounded-full border border-teal-700/60">
+                        {{ combined_bank_balance.account_count }} Linked Account{% if combined_bank_balance.account_count != 1 %}s{% endif %}
+                    </span>
+                </div>
+                <div class="text-2xl sm:text-3xl font-black tracking-tight text-white mt-0.5">
+                    {{ currency.symbol }}{{ "{:,.2f}".format(combined_bank_balance.total_current) }}
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center justify-between sm:justify-end space-x-4 text-xs relative z-10">
+            <div class="text-left sm:text-right">
+                <p class="text-slate-400 text-[11px]">Total Initial: <span class="font-semibold text-slate-200">{{ currency.symbol }}{{ "{:,.2f}".format(combined_bank_balance.total_initial) }}</span></p>
+                <p class="text-slate-400 text-[11px]">Deducted: <span class="font-semibold text-rose-300">-{{ currency.symbol }}{{ "{:,.2f}".format(combined_bank_balance.total_spent) }}</span></p>
+            </div>
+            <a href="{{ url_for('accounts_page') }}" class="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-teal-600 hover:bg-teal-500 text-white transition-all shadow-md active:scale-95">
+                <span>Manage Accounts</span>
+                <i class="fa-solid fa-arrow-right text-[10px]"></i>
+            </a>
+        </div>
+    </div>
+
     <!-- ==================== TOP KPI CARDS ==================== -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
         <!-- 1. Total Spent Card -->
@@ -186,9 +217,17 @@
                             {% endif %}
                         </td>
                         <td class="py-3.5 px-5 whitespace-nowrap">
-                            <span class="text-xs px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                                {{ exp.payment_method }}
-                            </span>
+                            <div class="flex flex-col space-y-0.5">
+                                <span class="text-xs px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 w-fit">
+                                    {{ exp.payment_method }}
+                                </span>
+                                {% if exp.account_name %}
+                                <span class="text-[10px] text-teal-600 dark:text-teal-400 font-medium flex items-center">
+                                    <i class="fa-solid fa-building-columns mr-1 text-[9px]"></i>
+                                    {{ exp.account_name }}
+                                </span>
+                                {% endif %}
+                            </div>
                         </td>
                         <td class="py-3.5 px-5 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
                             {{ currency.symbol }}{{ "%.2f"|format(exp.amount) }}
@@ -237,7 +276,7 @@
                     <span class="font-bold text-sm text-slate-900 dark:text-white block">
                         {{ currency.symbol }}{{ "%.2f"|format(exp.amount) }}
                     </span>
-                    <span class="text-[10px] text-slate-400">{{ exp.payment_method }}</span>
+                    <span class="text-[10px] text-slate-400 block">{{ exp.payment_method }}{% if exp.account_name %} &bull; {{ exp.account_name }}{% endif %}</span>
                 </div>
             </div>
             {% else %}

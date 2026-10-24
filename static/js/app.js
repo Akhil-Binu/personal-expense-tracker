@@ -367,6 +367,9 @@ function openAddExpenseModal() {
     const form = document.getElementById("expenseForm");
     if (form) form.reset();
     document.getElementById("expenseId").value = "";
+    if (document.getElementById("expenseAccount")) {
+        document.getElementById("expenseAccount").value = "";
+    }
     document.getElementById("modalTitle").textContent = "Log New Expense";
     document.getElementById("saveExpenseBtnText").textContent = "Save Expense";
     document.getElementById("expenseDate").value = new Date().toISOString().split("T")[0];
@@ -402,6 +405,9 @@ async function editExpense(id) {
         document.getElementById("expenseCategory").value = exp.category_id;
         document.getElementById("expenseDate").value = exp.date;
         document.getElementById("expenseNotes").value = exp.notes || "";
+        if (document.getElementById("expenseAccount")) {
+            document.getElementById("expenseAccount").value = exp.account_id || "";
+        }
 
         // Select payment method radio
         const radios = document.getElementsByName("payment_method");
@@ -433,6 +439,7 @@ async function handleExpenseSubmit(e) {
         amount: document.getElementById("expenseAmount").value,
         description: document.getElementById("expenseDescription").value,
         category_id: document.getElementById("expenseCategory").value,
+        account_id: document.getElementById("expenseAccount")?.value || null,
         date: document.getElementById("expenseDate").value,
         payment_method: document.querySelector('input[name="payment_method"]:checked')?.value || "Cash",
         notes: document.getElementById("expenseNotes").value
@@ -687,5 +694,115 @@ async function deleteCategory(id, name) {
         }
     } catch (err) {
         showToast("Network error deleting category", "error");
+    }
+}
+
+// ==================== BANK ACCOUNT MODAL & CRUD ====================
+
+function openAddAccountModal() {
+    const form = document.getElementById("accountForm");
+    if (form) form.reset();
+    document.getElementById("bankAccountId").value = "";
+    document.getElementById("accountModalTitle").textContent = "Add Bank Account";
+    document.getElementById("saveAccountBtnText").textContent = "Save Bank Account";
+    const modal = document.getElementById("accountModal");
+    if (modal) {
+        modal.classList.remove("hidden");
+        document.getElementById("accountName").focus();
+    }
+}
+
+function closeAccountModal() {
+    const modal = document.getElementById("accountModal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function editAccount(acc) {
+    document.getElementById("bankAccountId").value = acc.id;
+    document.getElementById("accountName").value = acc.name;
+    document.getElementById("accountType").value = acc.account_type || "Checking";
+    document.getElementById("accountNumber").value = acc.account_number || "";
+    document.getElementById("accountInitialBalance").value = acc.initial_balance;
+
+    // Set color radio
+    const colorRadios = document.getElementsByName("color");
+    for (let r of colorRadios) {
+        if (r.value === acc.color) {
+            r.checked = true;
+            break;
+        }
+    }
+
+    // Set icon radio
+    const iconRadios = document.getElementsByName("icon");
+    for (let r of iconRadios) {
+        if (r.value === acc.icon) {
+            r.checked = true;
+            break;
+        }
+    }
+
+    document.getElementById("accountModalTitle").textContent = "Edit Bank Account";
+    document.getElementById("saveAccountBtnText").textContent = "Update Account";
+    const modal = document.getElementById("accountModal");
+    if (modal) modal.classList.remove("hidden");
+}
+
+async function handleAccountSubmit(e) {
+    e.preventDefault();
+    const btn = document.getElementById("saveAccountBtn");
+    btn.disabled = true;
+
+    const id = document.getElementById("bankAccountId").value;
+    const isEdit = Boolean(id);
+
+    const payload = {
+        name: document.getElementById("accountName").value,
+        account_type: document.getElementById("accountType").value,
+        account_number: document.getElementById("accountNumber").value,
+        initial_balance: document.getElementById("accountInitialBalance").value,
+        color: document.querySelector('input[name="color"]:checked')?.value || "#0D9488",
+        icon: document.querySelector('input[name="icon"]:checked')?.value || "building-columns"
+    };
+
+    try {
+        const url = isEdit ? `/api/account/${id}` : "/api/account";
+        const method = isEdit ? "PUT" : "POST";
+
+        const res = await fetch(url, {
+            method: method,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message || "Bank account saved successfully!");
+            closeAccountModal();
+            setTimeout(() => window.location.reload(), 350);
+        } else {
+            showToast(data.error || "Failed to save bank account", "error");
+        }
+    } catch (err) {
+        showToast("Network error. Please try again.", "error");
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function deleteAccount(id, name) {
+    if (!confirm(`Are you sure you want to delete account "${name}"?\nAny expenses linked to this account will remain saved, but will become unlinked.`)) return;
+
+    try {
+        const res = await fetch(`/api/account/${id}/delete`, { method: "POST" });
+        const data = await res.json();
+        if (data.success) {
+            showToast("Bank account removed successfully");
+            setTimeout(() => window.location.reload(), 300);
+        } else {
+            showToast(data.error || "Failed to delete account", "error");
+        }
+    } catch (err) {
+        showToast("Network error deleting bank account", "error");
     }
 }

@@ -116,6 +116,22 @@ def init_db(seed_sample_data=True):
             cursor.execute("ALTER TABLE categories_new RENAME TO categories")
             cursor.execute("PRAGMA foreign_keys = ON")
 
+        # Bank accounts table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS bank_accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                account_type TEXT NOT NULL DEFAULT 'Checking',
+                account_number TEXT,
+                initial_balance REAL NOT NULL DEFAULT 0.0,
+                color TEXT NOT NULL DEFAULT '#3B82F6',
+                icon TEXT NOT NULL DEFAULT 'building-columns',
+                user_id INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        """)
+
         cursor.execute("PRAGMA table_info(categories)")
         cat_columns = [col["name"] for col in cursor.fetchall()]
         if "user_id" not in cat_columns:
@@ -125,6 +141,30 @@ def init_db(seed_sample_data=True):
         exp_columns = [col["name"] for col in cursor.fetchall()]
         if "user_id" not in exp_columns:
             cursor.execute("ALTER TABLE expenses ADD COLUMN user_id INTEGER DEFAULT 1")
+        if "account_id" not in exp_columns:
+            cursor.execute("ALTER TABLE expenses ADD COLUMN account_id INTEGER REFERENCES bank_accounts(id) ON DELETE SET NULL")
+
+        # Create index for bank accounts
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_account ON expenses(account_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_bank_accounts_user ON bank_accounts(user_id)")
+
+        # Seed default bank accounts for user 1 if none exist
+        cursor.execute("SELECT COUNT(*) FROM bank_accounts WHERE user_id = 1")
+        if cursor.fetchone()[0] == 0:
+            default_accounts = [
+                ("Main Checking Account", "Checking", "4821", 4500.0, "#0D9488", "building-columns", 1),
+                ("High-Yield Savings", "Savings", "9102", 15000.0, "#3B82F6", "piggy-bank", 1),
+                ("Digital Wallet / UPI", "Digital Wallet", "7730", 850.0, "#8B5CF6", "mobile-screen", 1),
+            ]
+            for acc in default_accounts:
+                cursor.execute("""
+                    INSERT INTO bank_accounts (name, account_type, account_number, initial_balance, color, icon, user_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, acc)
+
+        # Link any unlinked sample expenses to accounts for user 1
+        cursor.execute("UPDATE expenses SET account_id = 1 WHERE account_id IS NULL AND payment_method IN ('Debit Card', 'Bank Transfer', 'Credit Card') AND user_id = 1")
+        cursor.execute("UPDATE expenses SET account_id = 3 WHERE account_id IS NULL AND payment_method IN ('UPI / Digital Wallet') AND user_id = 1")
 
         # Settings table
         cursor.execute("""
@@ -278,6 +318,18 @@ def create_user(username, password, email=""):
                 INSERT OR IGNORE INTO categories (name, icon, color, monthly_budget, user_id)
                 VALUES (?, ?, ?, ?, ?)
             """, (cat["name"], cat["icon"], cat["color"], cat["budget"], user_id))
+
+        # Seed default bank accounts for this new user
+        default_accounts = [
+            ("Main Checking", "Checking", "1001", 3000.0, "#0D9488", "building-columns", user_id),
+            ("High-Yield Savings", "Savings", "2002", 8000.0, "#3B82F6", "piggy-bank", user_id),
+            ("Digital Wallet / UPI", "Digital Wallet", "3003", 500.0, "#8B5CF6", "mobile-screen", user_id),
+        ]
+        for acc in default_accounts:
+            cursor.execute("""
+                INSERT INTO bank_accounts (name, account_type, account_number, initial_balance, color, icon, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, acc)
             
         return {
             "id": user_id,
@@ -334,6 +386,111 @@ def recover_user_password(username, candidate_phrase, new_password):
         cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_pwd_hash, user["id"]))
         conn.commit()
     return True
+
+# ==================== Bank Account & Combined Balance Operations ====================
+
+def get_bank_accounts(user_id=1):
+    """
+    Returns all bank accounts for a user with:
+      - initial_balance
+      - total_spent (sum of expenses linked to this bank account)
+      - current_balance = initial_balance - total_spent
+      - expense_count
+    """
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT b.*,
+                   COALESCE(SUM(e.amount), 0) AS total_spent,
+                   COUNT(e.id) AS expense_count
+            FROM bank_accounts b
+            LEFT JOIN expenses e ON b.id = e.account_id AND e.user_id = ?
+            WHERE b.user_id = ?
+            GROUP BY b.id
+            ORDER BY b.id ASC
+        """, (user_id, user_id))
+        accounts = [dict(r) for r in cursor.fetchall()]
+        for a in accounts:
+            a["current_balance"] = round(a["initial_balance"] - a["total_spent"], 2)
+            a["initial_balance"] = round(a["initial_balance"], 2)
+            a["total_spent"] = round(a["total_spent"], 2)
+        return accounts
+
+def get_combined_balance(user_id=1):
+    """
+    Aggregates balances of all different bank accounts into one combined net financial balance!
+    Returns:
+      - total_initial_balance
+      - total_spent
+      - total_current_balance (net combined balance)
+      - account_count
+      - breakdown_by_type
+    """
+    accounts = get_bank_accounts(user_id=user_id)
+    total_initial = sum(a["initial_balance"] for a in accounts)
+    total_spent = sum(a["total_spent"] for a in accounts)
+    total_current = sum(a["current_balance"] for a in accounts)
+    
+    types_breakdown = {}
+    for a in accounts:
+        t = a["account_type"]
+        types_breakdown[t] = types_breakdown.get(t, 0.0) + a["current_balance"]
+        
+    return {
+        "total_initial": round(total_initial, 2),
+        "total_spent": round(total_spent, 2),
+        "total_current": round(total_current, 2),
+        "account_count": len(accounts),
+        "types_breakdown": {k: round(v, 2) for k, v in types_breakdown.items()},
+        "accounts": accounts
+    }
+
+def add_bank_account(name, account_type, initial_balance, account_number="", color="#3B82F6", icon="building-columns", user_id=1):
+    user_id = user_id or 1
+    clean_name = name.strip()
+    if not clean_name:
+        raise ValueError("Bank account name is required.")
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO bank_accounts (name, account_type, account_number, initial_balance, color, icon, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (clean_name, account_type.strip(), (account_number or "").strip(), float(initial_balance or 0.0), color.strip(), icon.strip(), user_id))
+        conn.commit()
+        return cursor.lastrowid
+
+def update_bank_account(account_id, name, account_type, initial_balance, account_number="", color="#3B82F6", icon="building-columns", user_id=1):
+    user_id = user_id or 1
+    clean_name = name.strip()
+    if not clean_name:
+        raise ValueError("Bank account name is required.")
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE bank_accounts
+            SET name = ?, account_type = ?, account_number = ?, initial_balance = ?, color = ?, icon = ?
+            WHERE id = ? AND user_id = ?
+        """, (clean_name, account_type.strip(), (account_number or "").strip(), float(initial_balance or 0.0), color.strip(), icon.strip(), account_id, user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def delete_bank_account(account_id, user_id=1):
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE expenses SET account_id = NULL WHERE account_id = ? AND user_id = ?", (account_id, user_id))
+        cursor.execute("DELETE FROM bank_accounts WHERE id = ? AND user_id = ?", (account_id, user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def get_bank_account_by_id(account_id, user_id=1):
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM bank_accounts WHERE id = ? AND user_id = ?", (account_id, user_id))
+        row = cursor.fetchone()
+        return dict(row) if row else None
 
 # ==================== Category Operations ====================
 
@@ -417,32 +574,32 @@ def delete_category(cat_id, user_id=None):
 
 # ==================== Expense Operations ====================
 
-def add_expense(expense_date, category_id, amount, payment_method, description, notes="", user_id=1):
+def add_expense(expense_date, category_id, amount, payment_method, description, notes="", user_id=1, account_id=None):
     user_id = user_id or 1
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO expenses (date, category_id, amount, payment_method, description, notes, user_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (expense_date, int(category_id), float(amount), payment_method.strip(), description.strip(), (notes or "").strip(), user_id))
+            INSERT INTO expenses (date, category_id, amount, payment_method, description, notes, user_id, account_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (expense_date, int(category_id), float(amount), payment_method.strip(), description.strip(), (notes or "").strip(), user_id, account_id))
         conn.commit()
         return cursor.lastrowid
 
-def update_expense(expense_id, expense_date, category_id, amount, payment_method, description, notes="", user_id=None):
+def update_expense(expense_id, expense_date, category_id, amount, payment_method, description, notes="", user_id=None, account_id=None):
     with get_connection() as conn:
         cursor = conn.cursor()
         if user_id:
             cursor.execute("""
                 UPDATE expenses
-                SET date = ?, category_id = ?, amount = ?, payment_method = ?, description = ?, notes = ?
+                SET date = ?, category_id = ?, amount = ?, payment_method = ?, description = ?, notes = ?, account_id = ?
                 WHERE id = ? AND user_id = ?
-            """, (expense_date, int(category_id), float(amount), payment_method.strip(), description.strip(), (notes or "").strip(), expense_id, user_id))
+            """, (expense_date, int(category_id), float(amount), payment_method.strip(), description.strip(), (notes or "").strip(), account_id, expense_id, user_id))
         else:
             cursor.execute("""
                 UPDATE expenses
-                SET date = ?, category_id = ?, amount = ?, payment_method = ?, description = ?, notes = ?
+                SET date = ?, category_id = ?, amount = ?, payment_method = ?, description = ?, notes = ?, account_id = ?
                 WHERE id = ?
-            """, (expense_date, int(category_id), float(amount), payment_method.strip(), description.strip(), (notes or "").strip(), expense_id))
+            """, (expense_date, int(category_id), float(amount), payment_method.strip(), description.strip(), (notes or "").strip(), account_id, expense_id))
         conn.commit()
         return cursor.rowcount > 0
 
@@ -460,9 +617,11 @@ def get_expense_by_id(expense_id, user_id=None):
     with get_connection() as conn:
         cursor = conn.cursor()
         query = """
-            SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color
+            SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color,
+                   b.name as account_name, b.color as account_color, b.account_type as account_type
             FROM expenses e
             JOIN categories c ON e.category_id = c.id
+            LEFT JOIN bank_accounts b ON e.account_id = b.id
             WHERE e.id = ?
         """
         params = [expense_id]
@@ -474,8 +633,8 @@ def get_expense_by_id(expense_id, user_id=None):
         row = cursor.fetchone()
         return dict(row) if row else None
 
-def get_expenses(start_date=None, end_date=None, category_id=None, payment_method=None, search=None, limit=None, offset=0, user_id=1):
-    """Filtered list of expenses for a specific user with joined category info."""
+def get_expenses(start_date=None, end_date=None, category_id=None, payment_method=None, search=None, limit=None, offset=0, user_id=1, account_id=None):
+    """Filtered list of expenses for a specific user with joined category and bank account info."""
     user_id = user_id or 1
     conditions = ["e.user_id = ?"]
     params = [user_id]
@@ -489,6 +648,9 @@ def get_expenses(start_date=None, end_date=None, category_id=None, payment_metho
     if category_id:
         conditions.append("e.category_id = ?")
         params.append(category_id)
+    if account_id:
+        conditions.append("e.account_id = ?")
+        params.append(account_id)
     if payment_method:
         conditions.append("e.payment_method = ?")
         params.append(payment_method)
@@ -500,9 +662,11 @@ def get_expenses(start_date=None, end_date=None, category_id=None, payment_metho
     where_clause = f"WHERE {' AND '.join(conditions)}"
     
     query = f"""
-        SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color
+        SELECT e.*, c.name as category_name, c.icon as category_icon, c.color as category_color,
+               b.name as account_name, b.color as account_color, b.account_type as account_type
         FROM expenses e
         JOIN categories c ON e.category_id = c.id
+        LEFT JOIN bank_accounts b ON e.account_id = b.id
         {where_clause}
         ORDER BY e.date DESC, e.id DESC
     """

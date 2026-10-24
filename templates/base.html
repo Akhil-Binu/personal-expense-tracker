@@ -92,6 +92,11 @@
                     <span>Categories & Budgets</span>
                 </a>
 
+                <a href="{{ url_for('accounts_page') }}" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors {% if active_page == 'accounts' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 shadow-sm border border-teal-200/50 dark:border-teal-800/50{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200{% endif %}">
+                    <i class="fa-solid fa-building-columns w-5 text-center text-lg"></i>
+                    <span>Bank Accounts</span>
+                </a>
+
                 <div class="pt-4 pb-2 px-3">
                     <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Data Management</p>
                 </div>
@@ -261,14 +266,14 @@
             </button>
         </div>
 
+        <a href="{{ url_for('accounts_page') }}" class="flex flex-col items-center justify-center flex-1 py-1 {% if active_page == 'accounts' %}text-teal-600 dark:text-teal-400{% else %}text-slate-400 hover:text-slate-600 dark:hover:text-slate-200{% endif %}">
+            <i class="fa-solid fa-building-columns text-lg mb-0.5"></i>
+            <span class="text-[10px] font-medium">Accounts</span>
+        </a>
+
         <a href="{{ url_for('reports_page') }}" class="flex flex-col items-center justify-center flex-1 py-1 {% if active_page == 'reports' %}text-teal-600 dark:text-teal-400{% else %}text-slate-400 hover:text-slate-600 dark:hover:text-slate-200{% endif %}">
             <i class="fa-solid fa-chart-column text-lg mb-0.5"></i>
             <span class="text-[10px] font-medium">Reports</span>
-        </a>
-
-        <a href="{{ url_for('categories_page') }}" class="flex flex-col items-center justify-center flex-1 py-1 {% if active_page == 'categories' %}text-teal-600 dark:text-teal-400{% else %}text-slate-400 hover:text-slate-600 dark:hover:text-slate-200{% endif %}">
-            <i class="fa-solid fa-tags text-lg mb-0.5"></i>
-            <span class="text-[10px] font-medium">Budgets</span>
         </a>
     </nav>
 
@@ -364,6 +369,25 @@
                                 Cash
                             </div>
                         </label>
+                    </div>
+                </div>
+
+                <!-- Bank Account / Wallet Selector -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Paid From Account (Optional)</label>
+                        <a href="{{ url_for('accounts_page') }}" class="text-[11px] font-medium text-teal-600 dark:text-teal-400 hover:underline">Manage Accounts</a>
+                    </div>
+                    <div class="relative">
+                        <select id="expenseAccount" name="account_id" class="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 outline-none transition-all">
+                            <option value="">-- No Account / Direct Cash --</option>
+                            {% for acc in bank_accounts_list %}
+                            <option value="{{ acc.id }}">
+                                {{ acc.name }} ({{ acc.account_type }}{% if acc.account_number %} ••{{ acc.account_number[-4:] }}{% endif %}) - Bal: {{ currency.symbol }}{{ "{:,.2f}".format(acc.current_balance) }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <i class="fa-solid fa-building-columns absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none"></i>
                     </div>
                 </div>
 
