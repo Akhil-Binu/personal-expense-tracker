@@ -19,7 +19,7 @@ import gzip
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-__version__ = "2.0.3"
+__version__ = "2.0.4"
 
 UPLOAD_FOLDER = os.path.join(app.root_path, "static", "uploads", "receipts")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -120,6 +120,13 @@ def add_performance_headers(response):
 
 # ==================== Authentication Views ====================
 
+def get_safe_redirect(default="dashboard"):
+    next_url = request.args.get("next")
+    if not next_url or not next_url.startswith("/") or next_url.startswith("//") or next_url.startswith("/login") or next_url.startswith("/verify-2fa"):
+        return url_for(default)
+    return next_url
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login_page():
     if get_current_user():
@@ -135,12 +142,12 @@ def login_page():
             # Check if Two-Factor Authentication is enabled
             if user.get("two_factor_enabled"):
                 session["pending_2fa_user_id"] = user["id"]
-                next_url = request.args.get("next") or url_for("dashboard")
+                next_url = get_safe_redirect("dashboard")
                 return redirect(url_for("verify_2fa_page", next=next_url))
                 
             session["user_id"] = user["id"]
             flash(f"Welcome back, {user['username']}!", "success")
-            next_url = request.args.get("next") or url_for("dashboard")
+            next_url = get_safe_redirect("dashboard")
             return redirect(next_url)
         else:
             error = "Invalid username or password. Please try again."
@@ -173,7 +180,7 @@ def verify_2fa_page():
             session.pop("pending_2fa_user_id", None)
             session["user_id"] = user["id"]
             flash(f"Welcome back, {user['username']}! 2FA verified successfully.", "success")
-            next_url = request.args.get("next") or url_for("dashboard")
+            next_url = get_safe_redirect("dashboard")
             return redirect(next_url)
         else:
             error = "Invalid 6-digit verification code or recovery phrase. Please try again."

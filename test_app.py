@@ -781,5 +781,55 @@ class ExpenseTrackerTestCase(unittest.TestCase):
         self.assertEqual(res_gz.headers.get("Content-Encoding"), "gzip")
 
 
+
+    def test_auth_headers_and_verify_2fa(self):
+        """Test that auth views (login, register, recover, verify-2fa) render clean top headers and no sidebar."""
+        # 1. Clear session to simulate unauthenticated visitor
+        with self.client.session_transaction() as sess:
+            sess.clear()
+
+        # 2. Check /login header
+        res_login = self.client.get("/login")
+        self.assertEqual(res_login.status_code, 200)
+        self.assertIn(b"FinanceFlow", res_login.data)
+        self.assertIn(b"toggleDarkMode()", res_login.data)
+        self.assertIn(b"Create Account", res_login.data)
+        self.assertNotIn(b"Export to Excel", res_login.data)
+        self.assertNotIn(b"Mobile Navigation Menu", res_login.data)
+
+        # 3. Check /register header
+        res_reg = self.client.get("/register")
+        self.assertEqual(res_reg.status_code, 200)
+        self.assertIn(b"FinanceFlow", res_reg.data)
+        self.assertIn(b"toggleDarkMode()", res_reg.data)
+        self.assertIn(b"Sign In", res_reg.data)
+
+        # 4. Check /recover header
+        res_rec = self.client.get("/recover")
+        self.assertEqual(res_rec.status_code, 200)
+        self.assertIn(b"FinanceFlow", res_rec.data)
+        self.assertIn(b"toggleDarkMode()", res_rec.data)
+
+        # 5. Check /verify-2fa when pending_2fa_user_id is NOT set -> redirects to /login
+        res_2fa_anon = self.client.get("/verify-2fa")
+        self.assertEqual(res_2fa_anon.status_code, 302)
+        self.assertIn("/login", res_2fa_anon.location)
+
+        # 6. Check /verify-2fa when pending_2fa_user_id IS set -> renders standalone page with top header
+        with self.client.session_transaction() as sess:
+            sess["pending_2fa_user_id"] = 1
+
+        res_2fa = self.client.get("/verify-2fa")
+        self.assertEqual(res_2fa.status_code, 200)
+        self.assertIn(b"Two-Factor Verification", res_2fa.data)
+        self.assertIn(b"6-Digit Security Code", res_2fa.data)
+        self.assertIn(b"Back to Sign In", res_2fa.data)
+        self.assertIn(b"toggleDarkMode()", res_2fa.data)
+        # Ensure it does NOT contain the base.html application sidebar or export controls
+        self.assertNotIn(b"Export to Excel", res_2fa.data)
+        self.assertNotIn(b"openMobileDrawer", res_2fa.data)
+        self.assertNotIn(b"toggleMobileDrawer", res_2fa.data)
+
+
 if __name__ == "__main__":
     unittest.main()
