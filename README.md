@@ -1,8 +1,8 @@
-# 💰 FinanceFlow — Personal Expense & Wealth Tracker (v2.0.0)
+# 💰 FinanceFlow — Personal Expense & Wealth Tracker (v2.0.2)
 
 <div align="center">
 
-[![Release](https://img.shields.io/badge/Release-v2.0.0-0D9488.svg?style=for-the-badge&logo=github)](https://github.com/Akhil-Binu/personal-expense-tracker/releases/tag/v2.0.0)
+[![Release](https://img.shields.io/badge/Release-v2.0.2-0D9488.svg?style=for-the-badge&logo=github)](https://github.com/Akhil-Binu/personal-expense-tracker/releases/tag/v2.0.2)
 [![Live Demo](https://img.shields.io/badge/Live_Demo-PythonAnywhere-22c55e.svg?style=for-the-badge&logo=pythonanywhere&logoColor=white)](https://akhilbinu.pythonanywhere.com)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Framework-Flask%203.1-black.svg?style=for-the-badge&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
