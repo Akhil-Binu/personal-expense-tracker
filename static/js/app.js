@@ -1726,3 +1726,231 @@ async function disable2FA() {
     }
 }
 
+
+// ==================== 8. DEBTS, LOANS & PEER CREDIT ====================
+
+let currentRepaymentMax = 0;
+
+function openAddDebtModal() {
+    const modal = document.getElementById("debtModal");
+    if (!modal) return;
+    document.getElementById("debtForm").reset();
+    document.getElementById("debtId").value = "";
+    document.getElementById("debtModalTitle").textContent = "Add Credit, Loan or Card";
+    document.getElementById("saveDebtBtn").textContent = "Save Record";
+    
+    // Default to friend_lent
+    const firstRadio = document.querySelector('input[name="debt_type"][value="friend_lent"]');
+    if (firstRadio) firstRadio.checked = true;
+
+    modal.classList.remove("hidden");
+    document.body.classList.add("overflow-hidden");
+}
+
+async function openEditDebtModal(debtId) {
+    const modal = document.getElementById("debtModal");
+    if (!modal) return;
+    
+    try {
+        const res = await fetch(`/api/debt/${debtId}`);
+        const data = await res.json();
+        if (!data.success) {
+            showToast(data.error || "Failed to load record", "error");
+            return;
+        }
+
+        const d = data.debt;
+        document.getElementById("debtId").value = d.id;
+        document.getElementById("debtModalTitle").textContent = "Edit Credit / Loan Record";
+        document.getElementById("saveDebtBtn").textContent = "Update Record";
+
+        // Set radio type
+        const radio = document.querySelector(`input[name="debt_type"][value="${d.debt_type}"]`);
+        if (radio) radio.checked = true;
+
+        document.getElementById("debtPerson").value = d.person_or_institution;
+        document.getElementById("debtTotalAmount").value = d.total_amount;
+        document.getElementById("debtPaidAmount").value = d.paid_amount;
+        document.getElementById("debtDueDate").value = d.due_date || "";
+        document.getElementById("debtInterestRate").value = d.interest_rate || "";
+        document.getElementById("debtAccountId").value = d.account_id || "";
+        document.getElementById("debtNotes").value = d.notes || "";
+
+        modal.classList.remove("hidden");
+        document.body.classList.add("overflow-hidden");
+    } catch (err) {
+        showToast("Error loading debt details", "error");
+    }
+}
+
+function closeDebtModal() {
+    const modal = document.getElementById("debtModal");
+    if (modal) {
+        modal.classList.add("hidden");
+        document.body.classList.remove("overflow-hidden");
+    }
+}
+
+async function handleDebtSubmit(event) {
+    event.preventDefault();
+    const btn = document.getElementById("saveDebtBtn");
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Saving...`;
+
+    const debtId = document.getElementById("debtId").value;
+    const debtType = document.querySelector('input[name="debt_type"]:checked').value;
+    const person = document.getElementById("debtPerson").value.trim();
+    const totalAmount = parseFloat(document.getElementById("debtTotalAmount").value) || 0;
+    const paidAmount = parseFloat(document.getElementById("debtPaidAmount").value) || 0;
+    const dueDate = document.getElementById("debtDueDate").value || null;
+    const interestRate = parseFloat(document.getElementById("debtInterestRate").value) || 0;
+    const accountId = document.getElementById("debtAccountId").value || null;
+    const notes = document.getElementById("debtNotes").value.trim();
+
+    const payload = {
+        debt_type: debtType,
+        person_or_institution: person,
+        total_amount: totalAmount,
+        paid_amount: paidAmount,
+        interest_rate: interestRate,
+        due_date: dueDate,
+        account_id: accountId,
+        notes: notes
+    };
+
+    try {
+        const url = debtId ? `/api/debt/${debtId}` : "/api/debt";
+        const method = debtId ? "PUT" : "POST";
+        const res = await fetch(url, {
+            method: method,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message || "Record saved successfully!");
+            closeDebtModal();
+            setTimeout(() => window.location.reload(), 500);
+        } else {
+            showToast(data.error || "Failed to save record", "error");
+        }
+    } catch (err) {
+        showToast("Network error saving record", "error");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = debtId ? "Update Record" : "Save Record";
+    }
+}
+
+async function deleteDebt(debtId, personName) {
+    if (!confirm(`Are you sure you want to delete the debt record for "${personName}"? This will also remove its repayment history.`)) return;
+
+    try {
+        const res = await fetch(`/api/debt/${debtId}`, { method: "DELETE" });
+        const data = await res.json();
+        if (data.success) {
+            showToast("Record deleted successfully");
+            setTimeout(() => window.location.reload(), 500);
+        } else {
+            showToast(data.error || "Failed to delete record", "error");
+        }
+    } catch (err) {
+        showToast("Network error deleting record", "error");
+    }
+}
+
+function openDebtPaymentModal(debtId, personName, remainingAmount, direction, accountId) {
+    const modal = document.getElementById("debtPaymentModal");
+    if (!modal) return;
+
+    document.getElementById("debtPaymentForm").reset();
+    document.getElementById("paymentDebtId").value = debtId;
+    document.getElementById("paymentDirection").value = direction;
+    currentRepaymentMax = parseFloat(remainingAmount) || 0;
+
+    document.getElementById("paymentPersonName").textContent = personName;
+    document.getElementById("paymentRemainingAmount").textContent = `${window.CURRENCY_SYMBOL || '$'}${currentRepaymentMax.toFixed(2)}`;
+
+    const sym = window.CURRENCY_SYMBOL || '$';
+    if (direction === "receivable") {
+        document.getElementById("paymentModalTitle").textContent = "Record Payment Received";
+        document.getElementById("paymentDirectionText").textContent = "Money received from friend towards balance";
+        document.getElementById("paymentAccountLabel").textContent = "Deposit Into Bank Account";
+        document.getElementById("submitPaymentBtn").innerHTML = `<i class="fa-solid fa-arrow-down-to-bracket mr-1.5"></i> Confirm Deposit`;
+    } else {
+        document.getElementById("paymentModalTitle").textContent = "Record Repayment";
+        document.getElementById("paymentDirectionText").textContent = "Repaying money you owe";
+        document.getElementById("paymentAccountLabel").textContent = "Pay From Bank Account";
+        document.getElementById("submitPaymentBtn").innerHTML = `<i class="fa-solid fa-money-bill-transfer mr-1.5"></i> Confirm Repayment`;
+    }
+
+    document.getElementById("paymentAmount").max = currentRepaymentMax;
+    document.getElementById("paymentAmount").value = "";
+    document.getElementById("paymentDate").value = new Date().toISOString().split("T")[0];
+    
+    if (accountId) {
+        document.getElementById("paymentAccountId").value = accountId;
+    }
+
+    modal.classList.remove("hidden");
+    document.body.classList.add("overflow-hidden");
+}
+
+function fillFullPaymentAmount() {
+    if (currentRepaymentMax > 0) {
+        document.getElementById("paymentAmount").value = currentRepaymentMax.toFixed(2);
+    }
+}
+
+function closeDebtPaymentModal() {
+    const modal = document.getElementById("debtPaymentModal");
+    if (modal) {
+        modal.classList.add("hidden");
+        document.body.classList.remove("overflow-hidden");
+    }
+}
+
+async function handleDebtPaymentSubmit(event) {
+    event.preventDefault();
+    const debtId = document.getElementById("paymentDebtId").value;
+    const amount = parseFloat(document.getElementById("paymentAmount").value) || 0;
+    const paymentDate = document.getElementById("paymentDate").value;
+    const accountId = document.getElementById("paymentAccountId").value || null;
+    const recordInAccount = document.getElementById("paymentRecordInAccount").checked ? 1 : 0;
+    const notes = document.getElementById("paymentNotes").value.trim();
+
+    if (amount <= 0) {
+        showToast("Please enter a payment amount greater than zero", "error");
+        return;
+    }
+
+    const btn = document.getElementById("submitPaymentBtn");
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Processing...`;
+
+    try {
+        const res = await fetch(`/api/debt/${debtId}/payment`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                amount: amount,
+                payment_date: paymentDate,
+                account_id: accountId,
+                record_in_account: recordInAccount,
+                notes: notes
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message || "Repayment recorded successfully!");
+            closeDebtPaymentModal();
+            setTimeout(() => window.location.reload(), 500);
+        } else {
+            showToast(data.error || "Failed to record payment", "error");
+        }
+    } catch (err) {
+        showToast("Network error recording payment", "error");
+    } finally {
+        btn.disabled = false;
+    }
+}

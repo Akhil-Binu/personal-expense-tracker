@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+
+{% block title %}Debts, Loans & Peer Credit{% endblock %}
+{% block header_title %}Debts, Loans & Credit{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- ==================== HERO KPI STRIP ==================== -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- 1. Total Owed to You (Receivables) -->
+        <div class="bg-gradient-to-br from-emerald-500/10 to-teal-500/5 dark:from-emerald-950/40 dark:to-teal-950/20 border border-emerald-200/80 dark:border-emerald-800/60 rounded-2xl p-5 shadow-sm relative overflow-hidden">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Owed to You (Receivable)</span>
+                <div class="w-9 h-9 rounded-xl bg-emerald-500 text-white flex items-center justify-center text-sm shadow-md shadow-emerald-500/20">
+                    <i class="fa-solid fa-hand-holding-dollar"></i>
+                </div>
+            </div>
+            <div class="text-2xl sm:text-3xl font-black text-emerald-700 dark:text-emerald-300">
+                +{{ currency.symbol }}{{ "{:,.2f}".format(summary.total_receivable) }}
+            </div>
+            <p class="text-[11px] text-emerald-600/80 dark:text-emerald-400/80 mt-1 font-medium">
+                Money given to friends to be paid back
+            </p>
+        </div>
+
+        <!-- 2. Total You Owe (Liabilities) -->
+        <div class="bg-gradient-to-br from-rose-500/10 to-red-500/5 dark:from-rose-950/40 dark:to-red-950/20 border border-rose-200/80 dark:border-rose-800/60 rounded-2xl p-5 shadow-sm relative overflow-hidden">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400">You Owe (Payable)</span>
+                <div class="w-9 h-9 rounded-xl bg-rose-500 text-white flex items-center justify-center text-sm shadow-md shadow-rose-500/20">
+                    <i class="fa-solid fa-scale-unbalanced"></i>
+                </div>
+            </div>
+            <div class="text-2xl sm:text-3xl font-black text-rose-700 dark:text-rose-300">
+                -{{ currency.symbol }}{{ "{:,.2f}".format(summary.total_payable) }}
+            </div>
+            <p class="text-[11px] text-rose-600/80 dark:text-rose-400/80 mt-1 font-medium">
+                Borrowed from friends + Loans + Cards
+            </p>
+        </div>
+
+        <!-- 3. Net Debt Position -->
+        <div class="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Net Credit Position</span>
+                <div class="w-9 h-9 rounded-xl {% if summary.net_position >= 0 %}bg-teal-500 text-white{% else %}bg-amber-500 text-white{% endif %} flex items-center justify-center text-sm shadow-md">
+                    <i class="fa-solid fa-scale-balanced"></i>
+                </div>
+            </div>
+            <div class="text-2xl sm:text-3xl font-black {% if summary.net_position >= 0 %}text-teal-600 dark:text-teal-400{% else %}text-amber-600 dark:text-amber-400{% endif %}">
+                {% if summary.net_position >= 0 %}+{% endif %}{{ currency.symbol }}{{ "{:,.2f}".format(summary.net_position) }}
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1 font-medium">
+                Receivables minus Total Liabilities
+            </p>
+        </div>
+
+        <!-- 4. Active Count -->
+        <div class="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Status Overview</span>
+                <div class="w-9 h-9 rounded-xl bg-indigo-500 text-white flex items-center justify-center text-sm shadow-md shadow-indigo-500/20">
+                    <i class="fa-solid fa-list-check"></i>
+                </div>
+            </div>
+            <div class="flex items-baseline space-x-2">
+                <span class="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">{{ summary.active_count }}</span>
+                <span class="text-xs text-slate-400 font-semibold">Active</span>
+                <span class="text-xs text-slate-300 dark:text-slate-600">&bull;</span>
+                <span class="text-xs text-emerald-600 dark:text-emerald-400 font-bold">{{ summary.settled_count }} Settled</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1">
+                {% if summary.overdue_count > 0 %}
+                <span class="text-rose-500 font-bold"><i class="fa-solid fa-circle-exclamation mr-1"></i>{{ summary.overdue_count }} Overdue</span>
+                {% else %}
+                <span class="text-emerald-500 font-medium"><i class="fa-solid fa-check mr-1"></i>All due dates on track</span>
+                {% endif %}
+            </p>
+        </div>
+    </div>
+
+    <!-- ==================== CONTROLS & FILTER TABS ==================== -->
+    <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <!-- Category Tabs -->
+        <div class="flex items-center space-x-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-none text-xs">
+            <button onclick="filterDebts('all')" id="tab-all" class="px-3.5 py-2 rounded-xl font-bold whitespace-nowrap transition-all tab-btn active-tab bg-teal-600 text-white shadow-sm">
+                <span>All Records</span>
+                <span class="ml-1.5 px-1.5 py-0.5 rounded-full bg-white/20 text-[10px]">{{ summary.total_records }}</span>
+            </button>
+            <button onclick="filterDebts('friend_lent')" id="tab-friend_lent" class="px-3.5 py-2 rounded-xl font-bold whitespace-nowrap transition-all tab-btn text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center space-x-1.5">
+                <i class="fa-solid fa-hand-holding-dollar text-emerald-500"></i>
+                <span>Given to Friends</span>
+                <span class="px-1.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 text-[10px]">{{ currency.symbol }}{{ "{:,.0f}".format(summary.friends_lent_total) }}</span>
+            </button>
+            <button onclick="filterDebts('friend_borrowed')" id="tab-friend_borrowed" class="px-3.5 py-2 rounded-xl font-bold whitespace-nowrap transition-all tab-btn text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center space-x-1.5">
+                <i class="fa-solid fa-handshake text-rose-500"></i>
+                <span>Taken from Friends</span>
+                <span class="px-1.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-400 text-[10px]">{{ currency.symbol }}{{ "{:,.0f}".format(summary.friends_borrowed_total) }}</span>
+            </button>
+            <button onclick="filterDebts('loan')" id="tab-loan" class="px-3.5 py-2 rounded-xl font-bold whitespace-nowrap transition-all tab-btn text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center space-x-1.5">
+                <i class="fa-solid fa-landmark text-amber-500"></i>
+                <span>Loans & EMIs</span>
+                <span class="px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 text-[10px]">{{ currency.symbol }}{{ "{:,.0f}".format(summary.loans_total) }}</span>
+            </button>
+            <button onclick="filterDebts('credit_card')" id="tab-credit_card" class="px-3.5 py-2 rounded-xl font-bold whitespace-nowrap transition-all tab-btn text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center space-x-1.5">
+                <i class="fa-solid fa-credit-card text-indigo-500"></i>
+                <span>Credit Cards</span>
+                <span class="px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400 text-[10px]">{{ currency.symbol }}{{ "{:,.0f}".format(summary.credit_cards_total) }}</span>
+            </button>
+        </div>
+
+        <!-- Right Side: Status Filter & Add Button -->
+        <div class="flex items-center space-x-2.5 flex-shrink-0">
+            <select id="statusFilter" onchange="handleStatusFilterChange()" class="py-2 px-3 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-teal-500 outline-none">
+                <option value="all">Status: All</option>
+                <option value="active">Active Only</option>
+                <option value="settled">Settled Only</option>
+            </select>
+            <button onclick="openAddDebtModal()" class="py-2 px-4 rounded-xl text-xs font-bold bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white shadow-md shadow-teal-600/20 active:scale-95 transition-all flex items-center space-x-1.5">
+                <i class="fa-solid fa-plus text-xs"></i>
+                <span>Add Record</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== DEBTS GRID ==================== -->
+    <div id="debtsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {% for d in debts %}
+        <div class="debt-card bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:shadow-md transition-all group"
+             data-type="{{ d.debt_type }}"
+             data-status="{{ d.status }}">
+            
+            <div>
+                <!-- Card Header -->
+                <div class="flex items-start justify-between gap-2 mb-3">
+                    <div class="flex items-center space-x-2.5 min-w-0">
+                        <div class="w-10 h-10 rounded-xl flex items-center justify-center text-base shadow-sm flex-shrink-0
+                            {% if d.debt_type == 'friend_lent' %}bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400
+                            {% elif d.debt_type == 'friend_borrowed' %}bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400
+                            {% elif d.debt_type == 'loan' %}bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400
+                            {% else %}bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400{% endif %}">
+                            <i class="fa-solid fa-{{ d.icon }}"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <h4 class="font-bold text-sm text-slate-900 dark:text-white truncate">{{ d.person_or_institution }}</h4>
+                            <span class="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5
+                                {% if d.debt_type == 'friend_lent' %}bg-emerald-100/80 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300/40
+                                {% elif d.debt_type == 'friend_borrowed' %}bg-rose-100/80 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-300/40
+                                {% elif d.debt_type == 'loan' %}bg-amber-100/80 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300/40
+                                {% else %}bg-indigo-100/80 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-300/40{% endif %}">
+                                {{ d.type_label }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Status Pill -->
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider flex-shrink-0
+                        {% if d.status == 'settled' %}bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300
+                        {% elif d.is_overdue %}bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-300 animate-pulse
+                        {% else %}bg-teal-100 text-teal-800 dark:bg-teal-900/60 dark:text-teal-300{% endif %}">
+                        {% if d.status == 'settled' %}Settled{% elif d.is_overdue %}Overdue{% else %}Active{% endif %}
+                    </span>
+                </div>
+
+                <!-- Notes / Description -->
+                {% if d.notes %}
+                <p class="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-4 bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                    {{ d.notes }}
+                </p>
+                {% endif %}
+
+                <!-- Financial Balance Spotlight -->
+                <div class="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-3.5 mb-4 border border-slate-100 dark:border-slate-800">
+                    <div class="flex items-baseline justify-between mb-1">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                            {% if d.direction == 'receivable' %}To Collect{% else %}Remaining Due{% endif %}
+                        </span>
+                        <span class="text-xl font-black {% if d.direction == 'receivable' %}text-emerald-600 dark:text-emerald-400{% else %}text-rose-600 dark:text-rose-400{% endif %}">
+                            {{ currency.symbol }}{{ "{:,.2f}".format(d.remaining_amount) }}
+                        </span>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden mt-2">
+                        <div class="h-full rounded-full transition-all duration-500
+                            {% if d.status == 'settled' %}bg-emerald-500
+                            {% elif d.direction == 'receivable' %}bg-emerald-500
+                            {% else %}bg-teal-500{% endif %}"
+                            style="width: {{ d.progress_percentage }}%;">
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between text-[11px] text-slate-400 mt-2 font-medium">
+                        <span>Paid: <strong class="text-slate-700 dark:text-slate-300">{{ currency.symbol }}{{ "{:,.2f}".format(d.paid_amount) }}</strong> ({{ d.progress_percentage }}%)</span>
+                        <span>Total: <strong class="text-slate-700 dark:text-slate-300">{{ currency.symbol }}{{ "{:,.2f}".format(d.total_amount) }}</strong></span>
+                    </div>
+                </div>
+
+                <!-- Metadata Row (Due date & Linked Account) -->
+                <div class="flex flex-wrap items-center gap-2 text-xs mb-4">
+                    {% if d.due_date %}
+                    <span class="inline-flex items-center px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px]">
+                        <i class="fa-regular fa-calendar-clock mr-1.5 opacity-70"></i>
+                        {% if d.status == 'settled' %}
+                        Due date was {{ d.due_date }}
+                        {% elif d.is_overdue %}
+                        <strong class="text-rose-500">Overdue by {{ (d.days_until_due)|abs }}d ({{ d.due_date }})</strong>
+                        {% elif d.days_until_due == 0 %}
+                        <strong class="text-amber-500">Due Today!</strong>
+                        {% else %}
+                        Due: {{ d.due_date }} (in {{ d.days_until_due }}d)
+                        {% endif %}
+                    </span>
+                    {% endif %}
+
+                    {% if d.interest_rate > 0 %}
+                    <span class="inline-flex items-center px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 text-[11px] font-semibold border border-amber-200/60 dark:border-amber-800/60">
+                        <i class="fa-solid fa-percent mr-1 text-[10px]"></i>
+                        {{ d.interest_rate }}% APR
+                    </span>
+                    {% endif %}
+
+                    {% if d.account_name %}
+                    <span class="inline-flex items-center px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px]">
+                        <i class="fa-solid fa-building-columns mr-1 text-teal-600 dark:text-teal-400"></i>
+                        {{ d.account_name }}
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Card Actions Footer -->
+            <div class="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2">
+                {% if d.status != 'settled' %}
+                <button onclick="openDebtPaymentModal({{ d.id }}, '{{ d.person_or_institution|replace('\'', '\\\'') }}', {{ d.remaining_amount }}, '{{ d.direction }}', {{ d.account_id or 'null' }})"
+                        class="flex-1 py-2 px-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center space-x-1.5 shadow-sm active:scale-95
+                        {% if d.direction == 'receivable' %}bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20
+                        {% else %}bg-teal-600 hover:bg-teal-500 text-white shadow-teal-600/20{% endif %}">
+                    <i class="fa-solid fa-money-bill-transfer"></i>
+                    <span>{% if d.direction == 'receivable' %}Record Payment Received{% else %}Make a Repayment{% endif %}</span>
+                </button>
+                {% else %}
+                <span class="flex-1 text-center py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800/60">
+                    <i class="fa-solid fa-circle-check mr-1.5"></i> Fully Paid & Settled
+                </span>
+                {% endif %}
+
+                <div class="flex items-center space-x-1 flex-shrink-0">
+                    <button onclick="openEditDebtModal({{ d.id }})" class="p-2 rounded-xl text-slate-400 hover:text-teal-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Edit">
+                        <i class="fa-solid fa-pen text-xs"></i>
+                    </button>
+                    <button onclick="deleteDebt({{ d.id }}, '{{ d.person_or_institution|replace('\'', '\\\'') }}')" class="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Delete">
+                        <i class="fa-solid fa-trash text-xs"></i>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Empty State -->
+    <div id="noDebtsState" class="hidden bg-white dark:bg-slate-900 rounded-3xl p-12 text-center border border-slate-200/80 dark:border-slate-800 shadow-sm">
+        <div class="w-16 h-16 rounded-3xl bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center text-2xl mx-auto mb-4 shadow-sm">
+            <i class="fa-solid fa-scale-balanced"></i>
+        </div>
+        <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-1">No debt or credit records found in this category</h3>
+        <p class="text-xs text-slate-400 max-w-md mx-auto mb-5">
+            Keep track of money lent to friends, personal borrowings, bank loans, and credit card balances with automated repayment tracking.
+        </p>
+        <button onclick="openAddDebtModal()" class="py-2.5 px-5 rounded-xl font-bold text-xs bg-teal-600 hover:bg-teal-500 text-white shadow-md active:scale-95 transition-all inline-flex items-center space-x-2">
+            <i class="fa-solid fa-plus"></i>
+            <span>Add First Debt / Credit</span>
+        </button>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let currentTab = 'all';
+
+    function filterDebts(type) {
+        currentTab = type;
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('bg-teal-600', 'text-white', 'shadow-sm');
+            btn.classList.add('text-slate-600', 'dark:text-slate-400');
+        });
+
+        const activeBtn = document.getElementById('tab-' + type);
+        if (activeBtn) {
+            activeBtn.classList.add('bg-teal-600', 'text-white', 'shadow-sm');
+            activeBtn.classList.remove('text-slate-600', 'dark:text-slate-400');
+        }
+
+        applyFilters();
+    }
+
+    function handleStatusFilterChange() {
+        applyFilters();
+    }
+
+    function applyFilters() {
+        const statusVal = document.getElementById('statusFilter').value;
+        const cards = document.querySelectorAll('.debt-card');
+        let visibleCount = 0;
+
+        cards.forEach(card => {
+            const cardType = card.getAttribute('data-type');
+            const cardStatus = card.getAttribute('data-status');
+
+            const typeMatch = (currentTab === 'all' || cardType === currentTab);
+            const statusMatch = (statusVal === 'all' || cardStatus === statusVal);
+
+            if (typeMatch && statusMatch) {
+                card.style.display = 'flex';
+                visibleCount++;
+            } else {
+                card.style.display = 'none';
+            }
+        });
+
+        const emptyState = document.getElementById('noDebtsState');
+        if (emptyState) {
+            emptyState.style.display = visibleCount === 0 ? 'block' : 'none';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        applyFilters();
+    });
+</script>
+{% endblock %}

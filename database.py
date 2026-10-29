@@ -257,6 +257,44 @@ def init_db(seed_sample_data=True):
             )
         """)
 
+        # Debts, Loans & Credit table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS debts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL DEFAULT 1,
+                debt_type TEXT NOT NULL, -- 'friend_lent', 'friend_borrowed', 'loan', 'credit_card'
+                person_or_institution TEXT NOT NULL,
+                total_amount REAL NOT NULL CHECK(total_amount > 0),
+                paid_amount REAL NOT NULL DEFAULT 0.0,
+                interest_rate REAL DEFAULT 0.0,
+                due_date TEXT,
+                account_id INTEGER,
+                status TEXT NOT NULL DEFAULT 'active', -- 'active', 'settled', 'overdue'
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (account_id) REFERENCES bank_accounts (id) ON DELETE SET NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        """)
+
+        # Debt Repayments ledger
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS debt_payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                debt_id INTEGER NOT NULL,
+                payment_date TEXT NOT NULL,
+                amount REAL NOT NULL CHECK(amount > 0),
+                account_id INTEGER,
+                payment_type TEXT NOT NULL, -- 'repayment_made', 'repayment_received'
+                notes TEXT,
+                user_id INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (debt_id) REFERENCES debts (id) ON DELETE CASCADE,
+                FOREIGN KEY (account_id) REFERENCES bank_accounts (id) ON DELETE SET NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        """)
+
         # Create index for bank accounts and v2 tables
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_account ON expenses(account_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_bank_accounts_user ON bank_accounts(user_id)")
@@ -265,6 +303,9 @@ def init_db(seed_sample_data=True):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_transfers_user ON transfers(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_subscriptions_user ON subscriptions(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_goals_user ON goals(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_debts_user ON debts(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_debts_type ON debts(debt_type)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_debt_payments_debt ON debt_payments(debt_id)")
 
         # Seed default bank accounts for user 1 if none exist
         cursor.execute("SELECT COUNT(*) FROM bank_accounts WHERE user_id = 1")
@@ -318,6 +359,11 @@ def init_db(seed_sample_data=True):
         cursor.execute("SELECT COUNT(*) FROM goals WHERE user_id = 1")
         if cursor.fetchone()[0] == 0 and seed_sample_data:
             _seed_sample_goals(conn)
+
+        # Seed sample debts & credits if none exist
+        cursor.execute("SELECT COUNT(*) FROM debts WHERE user_id = 1")
+        if cursor.fetchone()[0] == 0 and seed_sample_data:
+            _seed_sample_debts(conn)
             
         conn.commit()
 
@@ -371,6 +417,68 @@ def _seed_sample_goals(conn):
             INSERT INTO goals (name, target_amount, current_amount, target_date, color, icon, account_id, notes, user_id)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
         """, g)
+
+def _seed_sample_debts(conn):
+    """Seeds realistic peer credit, bank loans, and credit card balances."""
+    cursor = conn.cursor()
+    today = date.today()
+    sample_debts = [
+        (
+            "friend_lent",
+            "Sarah Jenkins (Trip Split)",
+            160.0,
+            60.0,
+            0.0,
+            (today + timedelta(days=10)).isoformat(),
+            1,
+            "active",
+            "Concert tickets and cab fare from music festival",
+            1
+        ),
+        (
+            "friend_borrowed",
+            "Michael Chang (Weekend Airbnb)",
+            240.0,
+            90.0,
+            0.0,
+            (today + timedelta(days=14)).isoformat(),
+            1,
+            "active",
+            "Ski chalet booking share",
+            1
+        ),
+        (
+            "loan",
+            "Chase Auto Loan (Honda Civic)",
+            12000.0,
+            5400.0,
+            4.9,
+            (today + timedelta(days=22)).isoformat(),
+            1,
+            "active",
+            "36-month fixed auto loan financing (EMI: $350/mo)",
+            1
+        ),
+        (
+            "credit_card",
+            "Amex Blue Cash Preferred",
+            1850.0,
+            650.0,
+            18.9,
+            (today + timedelta(days=18)).isoformat(),
+            1,
+            "active",
+            "Current statement balance (Limit: $10,000.00)",
+            1
+        ),
+    ]
+    for d in sample_debts:
+        cursor.execute("""
+            INSERT INTO debts (
+                debt_type, person_or_institution, total_amount, paid_amount,
+                interest_rate, due_date, account_id, status, notes, user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, d)
 
 def _seed_sample_expenses(conn):
     """Populates realistic historical and current month expenses for instant demonstration."""
@@ -1626,3 +1734,324 @@ def get_user_2fa_info(user_id):
         cursor.execute("SELECT two_factor_enabled, totp_secret, username, email FROM users WHERE id = ?", (user_id,))
         row = cursor.fetchone()
         return dict(row) if row else None
+
+# ==================== Debts, Loans & Credit Management ====================
+
+VALID_DEBT_TYPES = {"friend_lent", "friend_borrowed", "loan", "credit_card"}
+
+DEBT_TYPE_METADATA = {
+    "friend_lent": {
+        "label": "Given to Friend (Owed to You)",
+        "short_label": "Lent to Friend",
+        "direction": "receivable",
+        "badge_color": "emerald",
+        "icon": "hand-holding-dollar"
+    },
+    "friend_borrowed": {
+        "label": "Taken from Friend (You Owe)",
+        "short_label": "Borrowed from Friend",
+        "direction": "payable",
+        "badge_color": "rose",
+        "icon": "handshake"
+    },
+    "loan": {
+        "label": "Formal Bank Loan / EMI",
+        "short_label": "Loan / EMI",
+        "direction": "payable",
+        "badge_color": "amber",
+        "icon": "landmark"
+    },
+    "credit_card": {
+        "label": "Credit Card Balance",
+        "short_label": "Credit Card",
+        "direction": "payable",
+        "badge_color": "indigo",
+        "icon": "credit-card"
+    }
+}
+
+def add_debt(debt_type, person_or_institution, total_amount, paid_amount=0.0, interest_rate=0.0, due_date=None, account_id=None, notes="", user_id=1):
+    user_id = user_id or 1
+    if debt_type not in VALID_DEBT_TYPES:
+        raise ValueError(f"Invalid debt type: {debt_type}. Must be one of {VALID_DEBT_TYPES}")
+    
+    person = person_or_institution.strip()
+    if not person:
+        raise ValueError("Person or institution name is required.")
+        
+    total = round(float(total_amount), 2)
+    if total <= 0:
+        raise ValueError("Total amount must be greater than zero.")
+        
+    paid = round(max(0.0, float(paid_amount or 0.0)), 2)
+    rate = round(max(0.0, float(interest_rate or 0.0)), 2)
+    status = "settled" if paid >= total else "active"
+    
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO debts (
+                debt_type, person_or_institution, total_amount, paid_amount,
+                interest_rate, due_date, account_id, status, notes, user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (debt_type, person, total, paid, rate, due_date or None, account_id, status, (notes or "").strip(), user_id))
+        conn.commit()
+        return cursor.lastrowid
+
+def get_debts(user_id=1, debt_type=None, status=None):
+    user_id = user_id or 1
+    today = date.today()
+    conditions = ["d.user_id = ?"]
+    params = [user_id]
+    
+    if debt_type:
+        conditions.append("d.debt_type = ?")
+        params.append(debt_type)
+        
+    if status:
+        conditions.append("d.status = ?")
+        params.append(status)
+        
+    where = f"WHERE {' AND '.join(conditions)}"
+    query = f"""
+        SELECT d.*, b.name as account_name, b.color as account_color, b.account_type as account_type
+        FROM debts d
+        LEFT JOIN bank_accounts b ON d.account_id = b.id
+        {where}
+        ORDER BY 
+            CASE WHEN d.status = 'active' THEN 0 ELSE 1 END,
+            d.due_date ASC,
+            d.id DESC
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        rows = [dict(r) for r in cursor.fetchall()]
+        
+        for r in rows:
+            t = r["debt_type"]
+            meta = DEBT_TYPE_METADATA.get(t, DEBT_TYPE_METADATA["loan"])
+            r["type_label"] = meta["label"]
+            r["short_label"] = meta["short_label"]
+            r["direction"] = meta["direction"]
+            r["badge_color"] = meta["badge_color"]
+            r["icon"] = meta["icon"]
+            
+            total = r["total_amount"]
+            paid = r["paid_amount"]
+            r["remaining_amount"] = round(max(0.0, total - paid), 2)
+            r["progress_percentage"] = round(min(100.0, (paid / total * 100)), 1) if total > 0 else 0.0
+            r["is_settled"] = 1 if paid >= total else 0
+            
+            if r.get("due_date"):
+                try:
+                    due_dt = datetime.strptime(r["due_date"], "%Y-%m-%d").date()
+                    days = (due_dt - today).days
+                    r["days_until_due"] = days
+                    r["is_overdue"] = 1 if days < 0 and not r["is_settled"] else 0
+                except Exception:
+                    r["days_until_due"] = None
+                    r["is_overdue"] = 0
+            else:
+                r["days_until_due"] = None
+                r["is_overdue"] = 0
+                
+        return rows
+
+def get_debt_by_id(debt_id, user_id=1):
+    debts = get_debts(user_id=user_id)
+    for d in debts:
+        if d["id"] == debt_id:
+            return d
+    return None
+
+def update_debt(debt_id, debt_type, person_or_institution, total_amount, interest_rate=0.0, due_date=None, account_id=None, notes="", user_id=1):
+    user_id = user_id or 1
+    debt = get_debt_by_id(debt_id, user_id=user_id)
+    if not debt:
+        raise ValueError("Debt record not found.")
+        
+    person = person_or_institution.strip()
+    if not person:
+        raise ValueError("Person or institution name is required.")
+        
+    total = round(float(total_amount), 2)
+    if total <= 0:
+        raise ValueError("Total amount must be greater than zero.")
+        
+    rate = round(max(0.0, float(interest_rate or 0.0)), 2)
+    new_status = "settled" if debt["paid_amount"] >= total else "active"
+    
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE debts
+            SET debt_type = ?, person_or_institution = ?, total_amount = ?,
+                interest_rate = ?, due_date = ?, account_id = ?, status = ?, notes = ?
+            WHERE id = ? AND user_id = ?
+        """, (debt_type, person, total, rate, due_date or None, account_id, new_status, (notes or "").strip(), debt_id, user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def delete_debt(debt_id, user_id=1):
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM debt_payments WHERE debt_id = ? AND user_id = ?", (debt_id, user_id))
+        cursor.execute("DELETE FROM debts WHERE id = ? AND user_id = ?", (debt_id, user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def record_debt_payment(debt_id, amount, payment_date=None, account_id=None, notes="", record_in_account=True, user_id=1):
+    user_id = user_id or 1
+    debt = get_debt_by_id(debt_id, user_id=user_id)
+    if not debt:
+        raise ValueError("Debt record not found.")
+        
+    amt = round(float(amount), 2)
+    if amt <= 0:
+        raise ValueError("Payment amount must be greater than zero.")
+        
+    rem = debt["remaining_amount"]
+    if amt > (rem + 0.01):
+        raise ValueError(f"Payment amount (${amt:,.2f}) exceeds remaining balance (${rem:,.2f}).")
+        
+    p_date = payment_date or date.today().isoformat()
+    direction = debt["direction"]
+    p_type = "repayment_received" if direction == "receivable" else "repayment_made"
+    
+    new_paid = round(debt["paid_amount"] + amt, 2)
+    new_status = "settled" if new_paid >= debt["total_amount"] else "active"
+    
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        # Record payment transaction in ledger
+        cursor.execute("""
+            INSERT INTO debt_payments (debt_id, payment_date, amount, account_id, payment_type, notes, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (debt_id, p_date, amt, account_id, p_type, (notes or "").strip(), user_id))
+        
+        # Update debt balance & status
+        cursor.execute("""
+            UPDATE debts
+            SET paid_amount = ?, status = ?
+            WHERE id = ? AND user_id = ?
+        """, (new_paid, new_status, debt_id, user_id))
+        conn.commit()
+
+    # Synchronize with Bank Account if requested
+    if record_in_account and account_id:
+        acc_id = int(account_id)
+        if direction == "receivable":
+            # Friend paid you back -> Record as Income deposited into account
+            add_income(
+                date_str=p_date,
+                source=f"Repayment: {debt['person_or_institution']}",
+                amount=amt,
+                payment_method="Bank Transfer",
+                account_id=acc_id,
+                notes=notes or f"Repayment on {debt['person_or_institution']}",
+                user_id=user_id
+            )
+        else:
+            # You paid a friend, loan, or credit card -> Record as Expense from account
+            # Look up or create 'Debt & Loan Repayment' category
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM categories WHERE name = 'Debt & Loan Repayment' AND user_id = ?", (user_id,))
+                cat = cursor.fetchone()
+                if cat:
+                    cat_id = cat["id"]
+                else:
+                    cat_id = add_category("Debt & Loan Repayment", icon="scale-balanced", color="#EF4444", monthly_budget=0.0, user_id=user_id)
+                    
+            add_expense(
+                expense_date=p_date,
+                category_id=cat_id,
+                amount=amt,
+                payment_method="Bank Transfer",
+                description=f"Repayment: {debt['person_or_institution']}",
+                notes=notes or f"Repayment towards {debt['person_or_institution']}",
+                user_id=user_id,
+                account_id=acc_id
+            )
+            
+    return {
+        "debt_id": debt_id,
+        "new_paid_amount": new_paid,
+        "new_remaining_amount": round(max(0.0, debt["total_amount"] - new_paid), 2),
+        "status": new_status,
+        "is_settled": 1 if new_status == "settled" else 0
+    }
+
+def get_debt_payments(debt_id, user_id=1):
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT p.*, b.name as account_name, b.color as account_color
+            FROM debt_payments p
+            LEFT JOIN bank_accounts b ON p.account_id = b.id
+            WHERE p.debt_id = ? AND p.user_id = ?
+            ORDER BY p.payment_date DESC, p.id DESC
+        """, (debt_id, user_id))
+        return [dict(r) for r in cursor.fetchall()]
+
+def get_debt_summary(user_id=1):
+    user_id = user_id or 1
+    debts = get_debts(user_id=user_id)
+    
+    total_receivable = 0.0
+    total_payable = 0.0
+    friends_lent_total = 0.0
+    friends_borrowed_total = 0.0
+    loans_total = 0.0
+    credit_cards_total = 0.0
+    
+    active_count = 0
+    settled_count = 0
+    overdue_count = 0
+    
+    for d in debts:
+        rem = d["remaining_amount"]
+        t = d["debt_type"]
+        is_active = (d["status"] == "active")
+        
+        if is_active:
+            active_count += 1
+            if d.get("is_overdue"):
+                overdue_count += 1
+                
+            if t == "friend_lent":
+                total_receivable += rem
+                friends_lent_total += rem
+            elif t == "friend_borrowed":
+                total_payable += rem
+                friends_borrowed_total += rem
+            elif t == "loan":
+                total_payable += rem
+                loans_total += rem
+            elif t == "credit_card":
+                total_payable += rem
+                credit_cards_total += rem
+        else:
+            settled_count += 1
+            
+    total_receivable = round(total_receivable, 2)
+    total_payable = round(total_payable, 2)
+    net_position = round(total_receivable - total_payable, 2)
+    
+    return {
+        "total_receivable": total_receivable,
+        "total_payable": total_payable,
+        "net_position": net_position,
+        "friends_lent_total": round(friends_lent_total, 2),
+        "friends_borrowed_total": round(friends_borrowed_total, 2),
+        "loans_total": round(loans_total, 2),
+        "credit_cards_total": round(credit_cards_total, 2),
+        "active_count": active_count,
+        "settled_count": settled_count,
+        "overdue_count": overdue_count,
+        "total_records": len(debts)
+    }
+

@@ -76,6 +76,7 @@ def inject_global_data():
         "cash_flow_summary": database.get_cash_flow_summary(user_id=user_id),
         "upcoming_subs_count": len(database.get_upcoming_subscriptions(user_id=user_id, days=7)),
         "active_goals_count": len(database.get_goals(user_id=user_id)),
+        "debt_summary": database.get_debt_summary(user_id=user_id),
         "currency": database.get_currency(),
         "supported_currencies": SUPPORTED_CURRENCIES,
         "app_version": __version__,
@@ -227,6 +228,7 @@ def dashboard():
     upcoming_subs = database.get_upcoming_subscriptions(user_id=user_id, days=14)
     active_goals = database.get_goals(user_id=user_id)
     smart_insights = analytics_service.generate_smart_insights(user_id=user_id, month_str=month)
+    debt_summary = database.get_debt_summary(user_id=user_id)
     return render_template(
         "index.html",
         selected_month=month,
@@ -237,6 +239,7 @@ def dashboard():
         upcoming_subs=upcoming_subs,
         active_goals=active_goals,
         smart_insights=smart_insights,
+        debt_summary=debt_summary,
         active_page="dashboard"
     )
 
@@ -449,6 +452,27 @@ def accounts_page():
         combined=combined,
         transfers=transfers,
         active_page="accounts"
+    )
+
+@app.route("/debts")
+@login_required
+def debts_page():
+    """Debts, Loans, Credit Cards & Peer Credit management view."""
+    user = get_current_user()
+    user_id = user["id"]
+    debt_type = request.args.get("type") or None
+    status = request.args.get("status") or None
+    debts = database.get_debts(user_id=user_id, debt_type=debt_type, status=status)
+    summary = database.get_debt_summary(user_id=user_id)
+    accounts = database.get_bank_accounts(user_id=user_id)
+    return render_template(
+        "debts.html",
+        debts=debts,
+        summary=summary,
+        accounts=accounts,
+        selected_type=debt_type,
+        selected_status=status,
+        active_page="debts"
     )
 
 # ==================== PWA Routes ====================
@@ -1065,6 +1089,145 @@ def api_2fa_status():
         "enabled": bool(info.get("two_factor_enabled")),
         "has_secret": bool(info.get("totp_secret"))
     })
+
+# ==================== Debts, Loans & Credit APIs ====================
+
+@app.route("/api/debt", methods=["GET", "POST"])
+@login_required
+def api_debt_collection():
+    """List or create debt, peer credit, loan, or credit card records."""
+    user = get_current_user()
+    if request.method == "GET":
+        debt_type = request.args.get("type")
+        status = request.args.get("status")
+        debts = database.get_debts(user_id=user["id"], debt_type=debt_type, status=status)
+        summary = database.get_debt_summary(user_id=user["id"])
+        return jsonify({"success": True, "debts": debts, "summary": summary})
+
+    data = request.get_json() if request.is_json else request.form
+    try:
+        debt_type = data.get("debt_type", "friend_lent").strip()
+        person = data.get("person_or_institution", "").strip()
+        total_amount = float(data.get("total_amount") or 0.0)
+        paid_amount = float(data.get("paid_amount") or 0.0)
+        interest_rate = float(data.get("interest_rate") or 0.0)
+        due_date = data.get("due_date") or None
+        account_id = data.get("account_id") or data.get("bank_account_id")
+        account_id = int(account_id) if account_id and str(account_id).isdigit() else None
+        notes = data.get("notes", "").strip()
+        
+        debt_id = database.add_debt(
+            debt_type=debt_type,
+            person_or_institution=person,
+            total_amount=total_amount,
+            paid_amount=paid_amount,
+            interest_rate=interest_rate,
+            due_date=due_date,
+            account_id=account_id,
+            notes=notes,
+            user_id=user["id"]
+        )
+        created = database.get_debt_by_id(debt_id, user_id=user["id"])
+        return jsonify({
+            "success": True,
+            "id": debt_id,
+            "debt": created,
+            "message": "Debt record created successfully!"
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route("/api/debt/summary", methods=["GET"])
+@login_required
+def api_debt_summary():
+    user = get_current_user()
+    summary = database.get_debt_summary(user_id=user["id"])
+    return jsonify({"success": True, "summary": summary})
+
+@app.route("/api/debt/<int:debt_id>", methods=["GET"])
+@login_required
+def api_get_debt(debt_id):
+    user = get_current_user()
+    debt = database.get_debt_by_id(debt_id, user_id=user["id"])
+    if not debt:
+        return jsonify({"success": False, "error": "Debt record not found"}), 404
+    payments = database.get_debt_payments(debt_id, user_id=user["id"])
+    return jsonify({"success": True, "debt": debt, "payments": payments})
+
+@app.route("/api/debt/<int:debt_id>", methods=["PUT", "POST"])
+@login_required
+def api_update_debt(debt_id):
+    user = get_current_user()
+    data = request.get_json() if request.is_json else request.form
+    try:
+        debt_type = data.get("debt_type", "friend_lent").strip()
+        person = data.get("person_or_institution", "").strip()
+        total_amount = float(data.get("total_amount") or 0.0)
+        interest_rate = float(data.get("interest_rate") or 0.0)
+        due_date = data.get("due_date") or None
+        account_id = data.get("account_id") or data.get("bank_account_id")
+        account_id = int(account_id) if account_id and str(account_id).isdigit() else None
+        notes = data.get("notes", "").strip()
+        
+        updated = database.update_debt(
+            debt_id=debt_id,
+            debt_type=debt_type,
+            person_or_institution=person,
+            total_amount=total_amount,
+            interest_rate=interest_rate,
+            due_date=due_date,
+            account_id=account_id,
+            notes=notes,
+            user_id=user["id"]
+        )
+        if not updated:
+            return jsonify({"success": False, "error": "Debt record not found"}), 404
+        return jsonify({"success": True, "message": "Debt record updated successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route("/api/debt/<int:debt_id>", methods=["DELETE"])
+@app.route("/api/debt/<int:debt_id>/delete", methods=["POST", "DELETE"])
+@login_required
+def api_delete_debt(debt_id):
+    user = get_current_user()
+    try:
+        deleted = database.delete_debt(debt_id, user_id=user["id"])
+        if not deleted:
+            return jsonify({"success": False, "error": "Debt record not found"}), 404
+        return jsonify({"success": True, "message": "Debt record deleted successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route("/api/debt/<int:debt_id>/payment", methods=["POST"])
+@login_required
+def api_record_debt_payment(debt_id):
+    user = get_current_user()
+    data = request.get_json() if request.is_json else request.form
+    try:
+        amount = float(data.get("amount") or 0.0)
+        payment_date = data.get("payment_date") or data.get("date") or date.today().isoformat()
+        account_id = data.get("account_id") or data.get("bank_account_id")
+        account_id = int(account_id) if account_id and str(account_id).isdigit() else None
+        notes = data.get("notes", "").strip()
+        record_in_account = bool(int(data.get("record_in_account", 1)))
+        
+        result = database.record_debt_payment(
+            debt_id=debt_id,
+            amount=amount,
+            payment_date=payment_date,
+            account_id=account_id,
+            notes=notes,
+            record_in_account=record_in_account,
+            user_id=user["id"]
+        )
+        return jsonify({
+            "success": True,
+            "message": "Payment recorded successfully!",
+            "result": result
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
 
 # ==================== Bank Account APIs ====================
 

@@ -594,6 +594,94 @@ class ExpenseTrackerTestCase(unittest.TestCase):
         self.assertIn(b"Cash Flow Summary", res_stmt.data)
         self.assertIn(b"Team lunch at Bistro", res_stmt.data)
 
+    def test_debts_and_credit_api(self):
+        """Test peer credit (friend lent/borrowed), bank loans, credit cards, and repayments."""
+        # 1. Render /debts page
+        res_page = self.client.get("/debts")
+        self.assertEqual(res_page.status_code, 200)
+        self.assertIn(b"Debts, Loans & Peer Credit", res_page.data)
+        self.assertIn(b"Owed to You (Receivable)", res_page.data)
+
+        # 2. Add debt: Given to Friend (Lent / Receivable)
+        res_lent = self.client.post("/api/debt", json={
+            "debt_type": "friend_lent",
+            "person_or_institution": "Alex Miller",
+            "total_amount": 200.0,
+            "paid_amount": 0.0,
+            "account_id": 1,
+            "notes": "Concert festival ticket"
+        })
+        self.assertEqual(res_lent.status_code, 200)
+        lent_data = res_lent.get_json()
+        self.assertTrue(lent_data["success"])
+        lent_id = lent_data["id"]
+
+        # 3. Add debt: Taken from Friend (Borrowed / Payable)
+        res_borrowed = self.client.post("/api/debt", json={
+            "debt_type": "friend_borrowed",
+            "person_or_institution": "Sarah Davis",
+            "total_amount": 150.0,
+            "paid_amount": 0.0,
+            "account_id": 1,
+            "notes": "Group hotel booking"
+        })
+        self.assertEqual(res_borrowed.status_code, 200)
+        borrowed_id = res_borrowed.get_json()["id"]
+
+        # 4. Add Formal Loan (Payable)
+        res_loan = self.client.post("/api/debt", json={
+            "debt_type": "loan",
+            "person_or_institution": "Citi Personal Loan",
+            "total_amount": 3000.0,
+            "paid_amount": 500.0,
+            "interest_rate": 6.5,
+            "account_id": 1,
+            "notes": "Home renovation"
+        })
+        self.assertEqual(res_loan.status_code, 200)
+        loan_id = res_loan.get_json()["id"]
+
+        # 5. Check Summary API
+        res_sum = self.client.get("/api/debt/summary")
+        self.assertEqual(res_sum.status_code, 200)
+        sum_data = res_sum.get_json()["summary"]
+        self.assertGreaterEqual(sum_data["total_receivable"], 200.0)
+        self.assertGreaterEqual(sum_data["total_payable"], 2650.0)
+
+        # 6. Record Repayment on Lent Debt (Friend Alex pays back $50)
+        acc_before = database.get_bank_account_by_id(1, user_id=1)["current_balance"]
+        res_pay1 = self.client.post(f"/api/debt/{lent_id}/payment", json={
+            "amount": 50.0,
+            "account_id": 1,
+            "record_in_account": 1,
+            "notes": "Partial repayment via cash/transfer"
+        })
+        self.assertEqual(res_pay1.status_code, 200)
+        pay_res1 = res_pay1.get_json()
+        self.assertTrue(pay_res1["success"])
+        self.assertEqual(pay_res1["result"]["new_remaining_amount"], 150.0)
+
+        # Check bank account balance credited
+        acc_after = database.get_bank_account_by_id(1, user_id=1)["current_balance"]
+        self.assertAlmostEqual(acc_after, acc_before + 50.0, places=2)
+
+        # 7. Record Full Repayment on Borrowed Debt (Pay Sarah $150 in full)
+        res_pay2 = self.client.post(f"/api/debt/{borrowed_id}/payment", json={
+            "amount": 150.0,
+            "account_id": 1,
+            "record_in_account": 1
+        })
+        self.assertEqual(res_pay2.status_code, 200)
+        pay_res2 = res_pay2.get_json()
+        self.assertTrue(pay_res2["success"])
+        self.assertEqual(pay_res2["result"]["status"], "settled")
+        self.assertEqual(pay_res2["result"]["is_settled"], 1)
+
+        # 8. Delete loan
+        res_del = self.client.delete(f"/api/debt/{loan_id}")
+        self.assertEqual(res_del.status_code, 200)
+        self.assertIsNone(database.get_debt_by_id(loan_id, user_id=1))
+
 
 if __name__ == "__main__":
     unittest.main()

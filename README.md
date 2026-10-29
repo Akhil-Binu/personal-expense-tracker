@@ -36,6 +36,7 @@ Track daily spending and income streams, reconcile multi-account balances, manag
 - [Smart AI Receipt OCR Scanner](#-smart-ai-receipt-ocr-scanner)
 - [Smart AI Spending Insights & Budget Velocity](#-smart-ai-spending-insights--budget-velocity)
 - [Two-Factor Authentication (2FA) Security](#-two-factor-authentication-2fa-security)
+- [Debts, Loans & Peer Credit](#-debts-loans--peer-credit)
 - [Printable Financial Statements & PDF Export](#-printable-financial-statements--pdf-export)
 - [Interactive Monthly Budget Editor](#-interactive-monthly-budget-editor)
 - [Excel Spreadsheet Integration](#-excel-spreadsheet-integration)
@@ -241,6 +242,26 @@ The built-in analytics engine (`analytics_service.py`) provides real-time financ
 
 ---
 
+
+## 🤝 Debts, Loans & Peer Credit
+
+Manage all borrowing and lending relationships with complete two-way reconciliation:
+
+- **Peer Credit (Friends & Family)**:
+  - 🟢 **Given to Friends (Lent / Receivables)**: Record money you lent to friends for split bills, trip expenses, or concert tickets. Marked as an asset to be collected.
+  - 🔴 **Taken from Friends (Borrowed / Payables)**: Record money borrowed from friends that you need to pay back. Marked as a liability.
+- **Formal Bank Loans & EMIs**:
+  - Track Auto, Student, Personal, and Mortgage loans with principal amounts, interest rates (APR %), target payoff dates, and monthly EMIs.
+- **Credit Cards & Revolving Credit**:
+  - Track statement balances, limits, and payment due dates.
+- **1-Click Repayment Engine**:
+  - Click **"Record Repayment"** on any debt to log partial or full payments with automatic status advancement to `Settled`.
+  - **Automated Bank Reconciliation**: When receiving payment from a friend, automatically credit your selected bank account. When paying back a loan or friend, automatically debit your account and record the expense.
+- **Net Debt Position**:
+  - Real-time calculation: `Net Position = Total Owed to You (Receivables) - Total You Owe (Payables)`.
+
+---
+
 ## 🖨️ Printable Financial Statements & PDF Export
 
 Navigate to `/statement` to view an executive statement for any custom date range:
@@ -296,6 +317,11 @@ Navigate to `/statement` to view an executive statement for any custom date rang
 | `GET` | `/api/goal` | List all savings goals and completion percentages |
 | `POST` | `/api/goal` | Create a new financial goal |
 | `GET/PUT/DELETE` | `/api/goal/<id>` | Retrieve, update, or delete a savings goal |
+| `GET` | `/api/debt` | List debts & peer credit with optional type and status filters |
+| `POST` | `/api/debt` | Create a new peer debt, bank loan, or credit card record |
+| `GET/PUT/DELETE` | `/api/debt/<id>` | Retrieve, update, or delete a debt record |
+| `POST` | `/api/debt/<id>/payment` | Record a partial or full repayment with bank balance update |
+| `GET` | `/api/debt/summary` | Retrieve total receivables, payables, and net position metrics |
 | `POST` | `/api/goal/<id>/contribute` | Deposit funds from bank account into a savings goal |
 | `GET` | `/api/insights` | Retrieve AI spending insights and budget alerts |
 | `GET` | `/api/chart-data` | Retrieve series data for category, daily, history, and payment charts |
@@ -325,7 +351,7 @@ Output:
 ```
 ..................
 ----------------------------------------------------------------------
-Ran 18 tests in 2.538s
+Ran 19 tests in 2.538s
 
 OK
 ```
