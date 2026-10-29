@@ -14,11 +14,12 @@ import database
 import excel_service
 import auth_service
 import analytics_service
+import gzip
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-__version__ = "2.0.2"
+__version__ = "2.0.3"
 
 UPLOAD_FOLDER = os.path.join(app.root_path, "static", "uploads", "receipts")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -81,6 +82,41 @@ def inject_global_data():
         "supported_currencies": SUPPORTED_CURRENCIES,
         "app_version": __version__,
     }
+
+@app.after_request
+def add_performance_headers(response):
+    """
+    Applies high-performance browser caching headers and automatic
+    gzip response compression to drastically reduce network transfer and speed up page renders.
+    """
+    # 1. Static Asset Browser Caching (1 day with stale-while-revalidate)
+    if request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=86400, stale-while-revalidate=604800"
+    elif response.status_code == 200 and not request.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "private, no-cache, no-store, must-revalidate"
+
+    # 2. Gzip Compression for HTML, CSS, JS, and JSON
+    accept_encoding = request.headers.get("Accept-Encoding", "")
+    content_type = response.headers.get("Content-Type", "")
+    if (
+        "gzip" in accept_encoding
+        and response.status_code == 200
+        and not response.direct_passthrough
+        and response.data
+        and len(response.data) > 500
+        and any(t in content_type for t in ("text/", "application/json", "application/javascript"))
+        and "gzip" not in response.headers.get("Content-Encoding", "")
+    ):
+        try:
+            compressed = gzip.compress(response.data, compresslevel=6)
+            if len(compressed) < len(response.data):
+                response.data = compressed
+                response.headers["Content-Encoding"] = "gzip"
+                response.headers["Content-Length"] = str(len(compressed))
+        except Exception:
+            pass
+
+    return response
 
 # ==================== Authentication Views ====================
 

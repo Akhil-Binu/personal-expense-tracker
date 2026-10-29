@@ -61,3 +61,29 @@ body {
         font-size: 16px !important; /* Prevents auto-zoom on iOS Safari */
     }
 }
+
+/* Performance & UI Polish Enhancements */
+#mobileDrawer {
+    will-change: transform;
+}
+
+#mobileQuickAddSheet {
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease-out;
+}
+
+/* Modal Smooth Transitions & Keyboard Accessibility */
+.modal-backdrop-blur {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+/* Fast touch active feedback */
+button:active, a:active {
+    opacity: 0.85;
+}
+
+/* Optimize table and card rendering performance */
+.optimize-render {
+    content-visibility: auto;
+    contain-intrinsic-size: 60px;
+}

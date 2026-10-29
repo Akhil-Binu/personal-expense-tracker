@@ -1,8 +1,8 @@
-# 💰 FinanceFlow — Personal Expense & Wealth Tracker (v2.0.2)
+# 💰 FinanceFlow — Personal Expense & Wealth Tracker (v2.0.3)
 
 <div align="center">
 
-[![Release](https://img.shields.io/badge/Release-v2.0.2-0D9488.svg?style=for-the-badge&logo=github)](https://github.com/Akhil-Binu/personal-expense-tracker/releases/tag/v2.0.2)
+[![Release](https://img.shields.io/badge/Release-v2.0.3-0D9488.svg?style=for-the-badge&logo=github)](https://github.com/Akhil-Binu/personal-expense-tracker/releases/tag/v2.0.3)
 [![Live Demo](https://img.shields.io/badge/Live_Demo-PythonAnywhere-22c55e.svg?style=for-the-badge&logo=pythonanywhere&logoColor=white)](https://akhilbinu.pythonanywhere.com)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Framework-Flask%203.1-black.svg?style=for-the-badge&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
@@ -26,6 +26,7 @@ Track daily spending and income streams, reconcile multi-account balances, manag
 
 - [What's New in Version 2.0](#-whats-new-in-v20)
 - [Key Features](#-key-features)
+- [Performance & Mobile UI Optimizations](#-performance--mobile-ui-optimizations)
 - [Live Demo & Cloud Deployment](#-live-demo--cloud-deployment)
 - [Architecture & Tech Stack](#-architecture--tech-stack)
 - [Quick Start Guide](#-quick-start-guide)
@@ -174,6 +175,20 @@ The smart launcher will display access URLs and open your browser:
 - **Mobile / Tablet (Same Wi-Fi)**: `http://<your-lan-ip>:5000` *(e.g. `http://192.168.1.50:5000`)*
 
 ---
+
+
+## ⚡ Performance & Mobile UI Optimizations
+
+- **Sub-Second Page Loads**:
+  - **Dynamic Script Lazy-Loading**: Removed ~2.6 MB of upfront blocking scripts (Tesseract OCR and QRCode) from initial page render; scripts are dynamically fetched on-demand only when utilized.
+  - **HTTP Response Compression**: Automatic server-side Gzip compression reduces HTML, CSS, JS, and JSON payload sizes by up to 75%.
+  - **Browser Asset Caching**: 1-day immutable caching with `stale-while-revalidate` for static files and service worker asset caching.
+  - **SQLite WAL & Composite B-Tree Indexes**: Enabled SQLite Write-Ahead Logging (`WAL`), `synchronous=NORMAL`, 32MB page cache, and multi-column indexes (`expenses(user_id, date)`, `income(user_id, date)`, etc.).
+- **Streamlined Mobile & Desktop UX**:
+  - **Mobile Slide-Out Drawer**: 1-tap hamburger menu on smartphones gives instant access to all features (Debts, Bank Accounts, Savings Goals, Reports, PDF Statements).
+  - **Quick Action Bottom Sheet**: Floating `+` action button opens a 1-tap selector to log an Expense, log Income, or Transfer Money.
+  - **Keyboard Productivity**: Press `Escape` anywhere to instantly close active modals and drawers.
+  - **Auto-Focused Amount Inputs**: Opening any transaction modal automatically focuses and selects the amount field for rapid entry.
 
 ## 📱 Progressive Web App (PWA) & Mobile Installation
 

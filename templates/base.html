@@ -35,11 +35,17 @@
         }
     </script>
     
+    <!-- Preconnect to CDNs for speed -->
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- Chart.js (Deferred for fast FCP) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
     
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
@@ -47,12 +53,6 @@
     <!-- PWA Manifest & App Icons -->
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.svg') }}">
-    
-    <!-- Tesseract.js (Client-Side Offline Receipt OCR) -->
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    
-    <!-- QRCode.js (2FA Authenticator App Setup) -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 </head>
 <body class="h-full bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans transition-colors duration-200 antialiased selection:bg-teal-500 selection:text-white pb-20 md:pb-0">
 
@@ -201,12 +201,17 @@
         <div class="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50 dark:bg-slate-950">
             <!-- Top Mobile & Desktop Bar -->
             <header class="h-16 bg-white dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between px-4 sm:px-6 z-20 flex-shrink-0">
-                <!-- Mobile Logo -->
-                <div class="flex items-center space-x-3 md:hidden">
-                    <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-teal-600 to-emerald-400 flex items-center justify-center text-white shadow-sm">
-                        <i class="fa-solid fa-wallet text-sm"></i>
-                    </div>
-                    <span class="font-bold text-base tracking-tight bg-gradient-to-r from-teal-700 to-teal-500 dark:from-teal-400 dark:to-emerald-300 bg-clip-text text-transparent">FinanceFlow</span>
+                <!-- Mobile Logo & Hamburger Button -->
+                <div class="flex items-center space-x-2 md:hidden">
+                    <button type="button" onclick="toggleMobileDrawer(true)" class="p-2 -ml-1 text-slate-600 dark:text-slate-300 hover:text-teal-600 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" aria-label="Open Navigation Menu">
+                        <i class="fa-solid fa-bars text-lg"></i>
+                    </button>
+                    <a href="{{ url_for('dashboard') }}" class="flex items-center space-x-2">
+                        <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-teal-600 to-emerald-400 flex items-center justify-center text-white shadow-sm">
+                            <i class="fa-solid fa-wallet text-xs"></i>
+                        </div>
+                        <span class="font-bold text-sm tracking-tight bg-gradient-to-r from-teal-700 to-teal-500 dark:from-teal-400 dark:to-emerald-300 bg-clip-text text-transparent">FinanceFlow</span>
+                    </a>
                 </div>
 
                 <!-- Desktop Title / Breadcrumb -->
@@ -313,6 +318,131 @@
         </div>
     </div>
 
+    <!-- ==================== MOBILE SLIDE-OUT DRAWER ==================== -->
+    <div id="mobileDrawerBackdrop" onclick="toggleMobileDrawer(false)" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm transition-opacity hidden md:hidden"></div>
+    <div id="mobileDrawer" class="fixed inset-y-0 left-0 z-50 w-72 max-w-[82vw] bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 shadow-2xl transform -translate-x-full transition-transform duration-300 ease-in-out md:hidden flex flex-col">
+        <!-- Drawer Header -->
+        <div class="h-16 flex items-center justify-between px-5 border-b border-slate-100 dark:border-slate-800">
+            <div class="flex items-center space-x-2.5">
+                <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-teal-600 to-emerald-400 flex items-center justify-center text-white shadow-sm">
+                    <i class="fa-solid fa-wallet text-xs"></i>
+                </div>
+                <div>
+                    <span class="font-bold text-sm text-slate-800 dark:text-slate-100">FinanceFlow</span>
+                    <span class="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-teal-500/10 text-teal-600 dark:text-teal-400 ml-1">v{{ app_version }}</span>
+                </div>
+            </div>
+            <button onclick="toggleMobileDrawer(false)" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" aria-label="Close menu">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+
+        <!-- Drawer Navigation Links -->
+        <nav class="flex-1 px-3 py-3 space-y-1 overflow-y-auto">
+            <a href="{{ url_for('dashboard') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl font-medium text-xs transition-colors {% if active_page == 'dashboard' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 font-bold{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800{% endif %}">
+                <i class="fa-solid fa-chart-pie w-5 text-center text-sm text-teal-600"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="{{ url_for('income_page') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl font-medium text-xs transition-colors {% if active_page == 'income' %}bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 font-bold{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800{% endif %}">
+                <i class="fa-solid fa-money-bill-trend-up w-5 text-center text-sm text-emerald-600"></i>
+                <span>Income & Cash Flow</span>
+            </a>
+            <a href="{{ url_for('expenses_page') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl font-medium text-xs transition-colors {% if active_page == 'expenses' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 font-bold{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800{% endif %}">
+                <i class="fa-solid fa-receipt w-5 text-center text-sm text-teal-600"></i>
+                <span>Expenses</span>
+            </a>
+            <a href="{{ url_for('accounts_page') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl font-medium text-xs transition-colors {% if active_page == 'accounts' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 font-bold{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800{% endif %}">
+                <i class="fa-solid fa-building-columns w-5 text-center text-sm text-blue-500"></i>
+                <span>Bank Accounts</span>
+            </a>
+            <a href="{{ url_for('debts_page') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl font-medium text-xs transition-colors {% if active_page == 'debts' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 font-bold{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800{% endif %}">
+                <i class="fa-solid fa-scale-balanced w-5 text-center text-sm text-rose-500"></i>
+                <span>Debts & Loans</span>
+            </a>
+            <a href="{{ url_for('subscriptions_page') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl font-medium text-xs transition-colors {% if active_page == 'subscriptions' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 font-bold{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800{% endif %}">
+                <i class="fa-solid fa-repeat w-5 text-center text-sm text-indigo-500"></i>
+                <span>Subscriptions</span>
+            </a>
+            <a href="{{ url_for('goals_page') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl font-medium text-xs transition-colors {% if active_page == 'goals' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 font-bold{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800{% endif %}">
+                <i class="fa-solid fa-bullseye w-5 text-center text-sm text-amber-500"></i>
+                <span>Savings Goals</span>
+            </a>
+            <a href="{{ url_for('categories_page') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl font-medium text-xs transition-colors {% if active_page == 'categories' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 font-bold{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800{% endif %}">
+                <i class="fa-solid fa-tags w-5 text-center text-sm text-purple-500"></i>
+                <span>Categories & Budgets</span>
+            </a>
+            <a href="{{ url_for('reports_page') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl font-medium text-xs transition-colors {% if active_page == 'reports' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 font-bold{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800{% endif %}">
+                <i class="fa-solid fa-chart-column w-5 text-center text-sm text-indigo-500"></i>
+                <span>Reports & Analytics</span>
+            </a>
+            <a href="{{ url_for('statement_page') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl font-medium text-xs transition-colors {% if active_page == 'statement' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 font-bold{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800{% endif %}">
+                <i class="fa-solid fa-file-invoice-dollar w-5 text-center text-sm text-emerald-600"></i>
+                <span>PDF Statement</span>
+            </a>
+
+            <div class="pt-2 pb-1 px-2 border-t border-slate-100 dark:border-slate-800 mt-2">
+                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Quick Actions</p>
+            </div>
+
+            <button onclick="toggleMobileDrawer(false); openTransferModal();" class="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 text-left">
+                <i class="fa-solid fa-arrow-right-arrow-left w-5 text-center text-teal-600"></i>
+                <span>Transfer Money</span>
+            </button>
+            <a href="{{ url_for('export_excel') }}" class="flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                <i class="fa-solid fa-file-excel w-5 text-center text-emerald-600"></i>
+                <span>Export Excel</span>
+            </a>
+            <button onclick="toggleMobileDrawer(false); openImportModal();" class="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 text-left">
+                <i class="fa-solid fa-file-import w-5 text-center text-teal-600"></i>
+                <span>Import Excel</span>
+            </button>
+        </nav>
+
+        <!-- Drawer Footer -->
+        <div class="p-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+            <button onclick="toggleDarkMode()" class="flex items-center space-x-2 text-slate-600 dark:text-slate-400 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
+                <i class="fa-solid fa-moon dark:hidden"></i>
+                <i class="fa-solid fa-sun hidden dark:inline"></i>
+                <span class="text-xs font-medium">Dark Mode</span>
+            </button>
+            <a href="{{ url_for('logout') }}" class="text-rose-500 font-semibold p-2 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center space-x-1">
+                <i class="fa-solid fa-arrow-right-from-bracket text-xs"></i>
+                <span class="text-xs">Log Out</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- ==================== MOBILE QUICK-ADD ACTION SHEET ==================== -->
+    <div id="mobileQuickAddBackdrop" onclick="toggleQuickAddSheet(false)" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm transition-opacity hidden md:hidden"></div>
+    <div id="mobileQuickAddSheet" class="fixed bottom-20 left-4 right-4 z-50 bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-2xl border border-slate-200 dark:border-slate-800 transition-all duration-200 transform scale-95 opacity-0 pointer-events-none md:hidden flex flex-col space-y-2.5">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800 px-1">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Quick Record Transaction</span>
+            <button onclick="toggleQuickAddSheet(false)" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1">
+                <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+        </div>
+        <div class="grid grid-cols-3 gap-2.5 pt-1">
+            <button onclick="toggleQuickAddSheet(false); openAddExpenseModal();" class="flex flex-col items-center justify-center p-3 rounded-2xl bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200/60 dark:border-teal-800/60 active:scale-95 transition-transform">
+                <div class="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center mb-1.5 shadow-md shadow-teal-600/20">
+                    <i class="fa-solid fa-receipt text-sm"></i>
+                </div>
+                <span class="text-xs font-bold">Expense</span>
+            </button>
+            <button onclick="toggleQuickAddSheet(false); openAddIncomeModal();" class="flex flex-col items-center justify-center p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60 active:scale-95 transition-transform">
+                <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center mb-1.5 shadow-md shadow-emerald-600/20">
+                    <i class="fa-solid fa-circle-arrow-down text-sm"></i>
+                </div>
+                <span class="text-xs font-bold">Income</span>
+            </button>
+            <button onclick="toggleQuickAddSheet(false); openTransferModal();" class="flex flex-col items-center justify-center p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 active:scale-95 transition-transform">
+                <div class="w-10 h-10 rounded-xl bg-slate-700 text-white flex items-center justify-center mb-1.5 shadow-md">
+                    <i class="fa-solid fa-arrow-right-arrow-left text-sm"></i>
+                </div>
+                <span class="text-xs font-bold">Transfer</span>
+            </button>
+        </div>
+    </div>
+
     <!-- ==================== MOBILE BOTTOM NAVIGATION BAR ==================== -->
     <nav class="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-around px-2 z-40 shadow-lg">
         <a href="{{ url_for('dashboard') }}" class="flex flex-col items-center justify-center flex-1 py-1 {% if active_page == 'dashboard' %}text-teal-600 dark:text-teal-400{% else %}text-slate-400 hover:text-slate-600 dark:hover:text-slate-200{% endif %}">
@@ -327,8 +457,8 @@
 
         <!-- Mobile Floating Quick-Add Button in Center -->
         <div class="relative -top-4 flex items-center justify-center">
-            <button onclick="openAddExpenseModal()" class="w-12 h-12 rounded-full bg-gradient-to-tr from-teal-600 to-emerald-500 text-white flex items-center justify-center shadow-lg shadow-teal-500/30 active:scale-95 transition-transform" aria-label="Add Expense">
-                <i class="fa-solid fa-plus text-xl"></i>
+            <button onclick="toggleQuickAddSheet()" class="w-12 h-12 rounded-full bg-gradient-to-tr from-teal-600 to-emerald-500 text-white flex items-center justify-center shadow-lg shadow-teal-500/30 active:scale-95 transition-transform" aria-label="Quick Action">
+                <i id="quickAddFabIcon" class="fa-solid fa-plus text-xl transition-transform duration-200"></i>
             </button>
         </div>
 
@@ -337,10 +467,10 @@
             <span class="text-[9px] font-medium">Expenses</span>
         </a>
 
-        <a href="{{ url_for('subscriptions_page') }}" class="flex flex-col items-center justify-center flex-1 py-1 {% if active_page == 'subscriptions' %}text-indigo-600 dark:text-indigo-400{% else %}text-slate-400 hover:text-slate-600 dark:hover:text-slate-200{% endif %}">
-            <i class="fa-solid fa-repeat text-base mb-0.5"></i>
-            <span class="text-[9px] font-medium">Bills</span>
-        </a>
+        <button onclick="toggleMobileDrawer(true)" class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" aria-label="Open More Menu">
+            <i class="fa-solid fa-bars text-base mb-0.5"></i>
+            <span class="text-[9px] font-medium">More</span>
+        </button>
     </nav>
 
     <!-- ==================== MODAL: ADD / EDIT EXPENSE ==================== -->

@@ -386,7 +386,7 @@ class ExpenseTrackerTestCase(unittest.TestCase):
         # Service worker
         res_sw = self.client.get("/service-worker.js")
         self.assertEqual(res_sw.status_code, 200)
-        self.assertIn(b"financeflow-v2.0.2", res_sw.data)
+        self.assertIn(b"financeflow-v2.0.3", res_sw.data)
 
     def test_income_and_transfers_api(self):
         """Test Income CRUD and Inter-Account Transfers."""
@@ -764,6 +764,21 @@ class ExpenseTrackerTestCase(unittest.TestCase):
         # 8. Clean up category
         res_del = self.client.delete(f"/api/category/{new_cat_id}/delete")
         self.assertEqual(res_del.status_code, 200)
+
+
+    def test_performance_headers_and_compression(self):
+        """Test that static assets receive browser cache headers and responses are gzip compressed."""
+        # 1. Check static asset caching headers
+        res_css = self.client.get("/static/css/style.css")
+        self.assertEqual(res_css.status_code, 200)
+        self.assertIn("Cache-Control", res_css.headers)
+        self.assertIn("public", res_css.headers["Cache-Control"])
+        self.assertIn("max-age=86400", res_css.headers["Cache-Control"])
+
+        # 2. Check HTML response gzip compression
+        res_gz = self.client.get("/", headers={"Accept-Encoding": "gzip"})
+        self.assertEqual(res_gz.status_code, 200)
+        self.assertEqual(res_gz.headers.get("Content-Encoding"), "gzip")
 
 
 if __name__ == "__main__":

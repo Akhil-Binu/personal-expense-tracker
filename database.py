@@ -20,6 +20,10 @@ def get_connection():
     conn = sqlite3.connect(get_db_path())
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.execute("PRAGMA cache_size = -32000")
+    conn.execute("PRAGMA temp_store = MEMORY")
     try:
         yield conn
         conn.commit()
@@ -326,6 +330,10 @@ def init_db(seed_sample_data=True):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_user ON expenses(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_categories_user ON categories(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(user_id, date)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_income_user_date ON income(user_id, date)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_debts_user_status ON debts(user_id, status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_subscriptions_user_active ON subscriptions(user_id, is_active)")
         
         # Seed categories if none exist
         cursor.execute("SELECT COUNT(*) FROM categories WHERE user_id = 1")

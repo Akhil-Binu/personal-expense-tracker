@@ -376,7 +376,10 @@ function openAddExpenseModal() {
 
     const modal = document.getElementById("expenseModal");
     modal.classList.remove("hidden");
-    document.getElementById("expenseAmount").focus();
+    setTimeout(() => {
+        const amt = document.getElementById("expenseAmount");
+        if (amt) { amt.focus(); amt.select(); }
+    }, 40);
 }
 
 function closeExpenseModal() {
@@ -1130,9 +1133,19 @@ async function runReceiptOcr(input) {
     const progressBar = document.getElementById("ocrProgressBar");
 
     try {
-        statusText.textContent = "Loading AI OCR Model...";
+        statusText.textContent = "Loading AI OCR Engine...";
         percentText.textContent = "10%";
         progressBar.style.width = "10%";
+
+        if (!window.Tesseract) {
+            await new Promise((resolve, reject) => {
+                const s = document.createElement("script");
+                s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+                s.onload = resolve;
+                s.onerror = () => reject(new Error("Failed to load OCR library"));
+                document.head.appendChild(s);
+            });
+        }
 
         const worker = await Tesseract.createWorker("eng");
         
@@ -1716,7 +1729,17 @@ async function startSetup2FA() {
         current2faSecret = data.secret;
         document.getElementById("twoFactorSecretText").value = data.secret;
 
-        // Render QR Code using qrcode.js
+        // Render QR Code using qrcode.js (on-demand loaded)
+        if (!window.QRCode) {
+            await new Promise((resolve) => {
+                const s = document.createElement("script");
+                s.src = "https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js";
+                s.onload = resolve;
+                s.onerror = resolve;
+                document.head.appendChild(s);
+            });
+        }
+
         const canvasContainer = document.getElementById("twoFactorQrCodeCanvas");
         canvasContainer.innerHTML = "";
         if (window.QRCode) {
@@ -2010,3 +2033,62 @@ async function handleDebtPaymentSubmit(event) {
         btn.disabled = false;
     }
 }
+
+
+// ==================== MOBILE NAVIGATION & QUICK ACTIONS ====================
+
+function toggleMobileDrawer(forceState = null) {
+    const drawer = document.getElementById("mobileDrawer");
+    const backdrop = document.getElementById("mobileDrawerBackdrop");
+    if (!drawer || !backdrop) return;
+    const isOpening = forceState !== null ? forceState : drawer.classList.contains("-translate-x-full");
+    if (isOpening) {
+        backdrop.classList.remove("hidden");
+        setTimeout(() => drawer.classList.remove("-translate-x-full"), 10);
+    } else {
+        drawer.classList.add("-translate-x-full");
+        setTimeout(() => backdrop.classList.add("hidden"), 250);
+    }
+}
+
+function toggleQuickAddSheet(forceState = null) {
+    const sheet = document.getElementById("mobileQuickAddSheet");
+    const backdrop = document.getElementById("mobileQuickAddBackdrop");
+    const fabIcon = document.getElementById("quickAddFabIcon");
+    if (!sheet) {
+        openAddExpenseModal();
+        return;
+    }
+    const isOpening = forceState !== null ? forceState : sheet.classList.contains("pointer-events-none");
+    if (isOpening) {
+        if (backdrop) backdrop.classList.remove("hidden");
+        sheet.classList.remove("pointer-events-none", "opacity-0", "scale-95");
+        sheet.classList.add("opacity-100", "scale-100");
+        if (fabIcon) fabIcon.style.transform = "rotate(45deg)";
+    } else {
+        sheet.classList.remove("opacity-100", "scale-100");
+        sheet.classList.add("pointer-events-none", "opacity-0", "scale-95");
+        if (backdrop) backdrop.classList.add("hidden");
+        if (fabIcon) fabIcon.style.transform = "rotate(0deg)";
+    }
+}
+
+// Global Keyboard Escape Handler
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+        if (typeof closeExpenseModal === "function") closeExpenseModal();
+        if (typeof closeIncomeModal === "function") closeIncomeModal();
+        if (typeof closeTransferModal === "function") closeTransferModal();
+        if (typeof closeCategoryModal === "function") closeCategoryModal();
+        if (typeof closeMonthlyBudgetModal === "function") closeMonthlyBudgetModal();
+        if (typeof closeImportModal === "function") closeImportModal();
+        if (typeof closeTwoFactorModal === "function") closeTwoFactorModal();
+        if (typeof closeSubscriptionModal === "function") closeSubscriptionModal();
+        if (typeof closeGoalModal === "function") closeGoalModal();
+        if (typeof closeGoalContributionModal === "function") closeGoalContributionModal();
+        if (typeof closeDebtModal === "function") closeDebtModal();
+        if (typeof closeDebtPaymentModal === "function") closeDebtPaymentModal();
+        toggleMobileDrawer(false);
+        toggleQuickAddSheet(false);
+    }
+});
