@@ -47,22 +47,22 @@
             </div>
 
             <!-- Right: Action Shortcuts -->
-            <div class="flex items-center space-x-2 flex-wrap">
-                <button onclick="openAddIncomeModal()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-md active:scale-95 flex items-center space-x-1.5">
+            <div class="grid grid-cols-2 sm:flex sm:items-center gap-2">
+                <button onclick="openAddIncomeModal()" class="px-3 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-md active:scale-95 flex items-center justify-center space-x-1.5 whitespace-nowrap">
                     <i class="fa-solid fa-circle-arrow-down text-xs"></i>
-                    <span>+ Income</span>
+                    <span>Income</span>
                 </button>
-                <button onclick="openAddExpenseModal()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white transition-all shadow-md active:scale-95 flex items-center space-x-1.5">
+                <button onclick="openAddExpenseModal()" class="px-3 py-2 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white transition-all shadow-md active:scale-95 flex items-center justify-center space-x-1.5 whitespace-nowrap">
                     <i class="fa-solid fa-plus text-xs"></i>
-                    <span>+ Expense</span>
+                    <span>Expense</span>
                 </button>
-                <button onclick="openTransferModal()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all active:scale-95 flex items-center space-x-1.5">
+                <button onclick="openTransferModal()" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all active:scale-95 flex items-center justify-center space-x-1.5 whitespace-nowrap">
                     <i class="fa-solid fa-arrow-right-arrow-left text-xs"></i>
                     <span>Transfer</span>
                 </button>
-                <a href="{{ url_for('debts_page') }}" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-900/40 hover:bg-rose-800/60 text-rose-200 border border-rose-700/60 transition-all active:scale-95 flex items-center space-x-1.5">
+                <a href="{{ url_for('debts_page') }}" class="px-3 py-2 rounded-xl text-xs font-bold bg-rose-900/50 hover:bg-rose-800/70 text-rose-200 border border-rose-700/60 transition-all active:scale-95 flex items-center justify-center space-x-1.5 whitespace-nowrap">
                     <i class="fa-solid fa-scale-balanced text-xs"></i>
-                    <span>Debts & Loans</span>
+                    <span>Debts</span>
                 </a>
             </div>
         </div>
