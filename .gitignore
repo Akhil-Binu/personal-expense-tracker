@@ -46,8 +46,10 @@ venv.bak/
 ehthumbs.db
 Thumbs.db
 
-# IDEs
-.vscode/
+# Receipts
+static/uploads/receipts/*
+!static/uploads/receipts/.gitkeep
+
 .idea/
 *.swp
 *.swo

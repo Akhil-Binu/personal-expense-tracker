@@ -1,18 +1,29 @@
 """
-Personal Expense Tracker - Flask Application
-Serves desktop, tablet, and mobile web experiences with SQLite backend & Excel integration.
+Personal Expense Tracker - Flask Application (FinanceFlow v2.0)
+Serves desktop, tablet, and mobile web experiences with SQLite backend,
+multi-account balances, subscriptions, goals, cash flow, receipt uploads,
+AI spending insights, 2FA security, and progressive web app (PWA) capabilities.
 """
-from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, flash, session
+from flask import Flask, render_template, request, jsonify, send_file, send_from_directory, redirect, url_for, flash, session
 import os
+import uuid
 from functools import wraps
 from datetime import datetime, date
+from werkzeug.utils import secure_filename
 import database
 import excel_service
+import auth_service
+import analytics_service
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
+
+UPLOAD_FOLDER = os.path.join(app.root_path, "static", "uploads", "receipts")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+ALLOWED_RECEIPT_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "pdf"}
 
 # Initialize database on startup
 database.init_db(seed_sample_data=True)
@@ -62,6 +73,9 @@ def inject_global_data():
         "categories_list": database.get_categories(user_id=user_id),
         "bank_accounts_list": database.get_bank_accounts(user_id=user_id),
         "combined_bank_balance": database.get_combined_balance(user_id=user_id),
+        "cash_flow_summary": database.get_cash_flow_summary(user_id=user_id),
+        "upcoming_subs_count": len(database.get_upcoming_subscriptions(user_id=user_id, days=7)),
+        "active_goals_count": len(database.get_goals(user_id=user_id)),
         "currency": database.get_currency(),
         "supported_currencies": SUPPORTED_CURRENCIES,
         "app_version": __version__,
@@ -81,6 +95,12 @@ def login_page():
         
         user = database.authenticate_user(username, password)
         if user:
+            # Check if Two-Factor Authentication is enabled
+            if user.get("two_factor_enabled"):
+                session["pending_2fa_user_id"] = user["id"]
+                next_url = request.args.get("next") or url_for("dashboard")
+                return redirect(url_for("verify_2fa_page", next=next_url))
+                
             session["user_id"] = user["id"]
             flash(f"Welcome back, {user['username']}!", "success")
             next_url = request.args.get("next") or url_for("dashboard")
@@ -89,6 +109,39 @@ def login_page():
             error = "Invalid username or password. Please try again."
             
     return render_template("login.html", error=error)
+
+@app.route("/verify-2fa", methods=["GET", "POST"])
+def verify_2fa_page():
+    pending_user_id = session.get("pending_2fa_user_id")
+    if not pending_user_id:
+        return redirect(url_for("login_page"))
+        
+    user = database.get_user_by_id(pending_user_id)
+    if not user:
+        session.pop("pending_2fa_user_id", None)
+        return redirect(url_for("login_page"))
+        
+    error = None
+    if request.method == "POST":
+        totp_code = request.form.get("totp_code", "").strip()
+        recovery_phrase = request.form.get("recovery_phrase", "").strip()
+        
+        verified = False
+        if totp_code:
+            verified = auth_service.verify_totp_code(user.get("totp_secret"), totp_code)
+        elif recovery_phrase:
+            verified = auth_service.verify_phrase(user.get("recovery_phrase_hash"), recovery_phrase)
+            
+        if verified:
+            session.pop("pending_2fa_user_id", None)
+            session["user_id"] = user["id"]
+            flash(f"Welcome back, {user['username']}! 2FA verified successfully.", "success")
+            next_url = request.args.get("next") or url_for("dashboard")
+            return redirect(next_url)
+        else:
+            error = "Invalid 6-digit verification code or recovery phrase. Please try again."
+            
+    return render_template("verify_2fa.html", username=user["username"], error=error)
 
 @app.route("/register", methods=["GET", "POST"])
 def register_page():
@@ -163,19 +216,27 @@ def logout():
 @app.route("/")
 @login_required
 def dashboard():
-    """Main dashboard page."""
+    """Main dashboard page (v2.0 with Cash Flow, Upcoming Subscriptions, Goals, and AI Insights)."""
     user = get_current_user()
     user_id = user["id"]
     month = request.args.get("month", date.today().strftime("%Y-%m"))
     metrics = database.get_monthly_metrics(month, user_id=user_id)
     categories = database.get_category_breakdown(month, user_id=user_id)
     recent_expenses = database.get_expenses(limit=8, user_id=user_id)
+    cash_flow = database.get_cash_flow_summary(user_id=user_id, month_str=month)
+    upcoming_subs = database.get_upcoming_subscriptions(user_id=user_id, days=14)
+    active_goals = database.get_goals(user_id=user_id)
+    smart_insights = analytics_service.generate_smart_insights(user_id=user_id, month_str=month)
     return render_template(
         "index.html",
         selected_month=month,
         metrics=metrics,
         categories=categories,
         recent_expenses=recent_expenses,
+        cash_flow=cash_flow,
+        upcoming_subs=upcoming_subs,
+        active_goals=active_goals,
+        smart_insights=smart_insights,
         active_page="dashboard"
     )
 
@@ -224,6 +285,114 @@ def expenses_page():
         active_page="expenses"
     )
 
+@app.route("/income")
+@login_required
+def income_page():
+    """Income streams and cash flow management view (v2.0)."""
+    user = get_current_user()
+    user_id = user["id"]
+    start_date = request.args.get("start_date")
+    end_date = request.args.get("end_date")
+    
+    incomes = database.get_income_list(user_id=user_id, start_date=start_date, end_date=end_date)
+    accounts = database.get_bank_accounts(user_id=user_id)
+    cash_flow = database.get_cash_flow_summary(user_id=user_id)
+    total_income = sum(i["amount"] for i in incomes)
+    
+    return render_template(
+        "income.html",
+        incomes=incomes,
+        accounts=accounts,
+        cash_flow=cash_flow,
+        total_income=round(total_income, 2),
+        filters={"start_date": start_date or "", "end_date": end_date or ""},
+        active_page="income"
+    )
+
+@app.route("/subscriptions")
+@login_required
+def subscriptions_page():
+    """Recurring subscriptions & upcoming bills management view (v2.0)."""
+    user = get_current_user()
+    user_id = user["id"]
+    subscriptions = database.get_subscriptions(user_id=user_id)
+    categories = database.get_categories(user_id=user_id)
+    accounts = database.get_bank_accounts(user_id=user_id)
+    upcoming = database.get_upcoming_subscriptions(user_id=user_id, days=30)
+    
+    total_monthly = sum(
+        s["amount"] if s.get("billing_cycle", "Monthly") == "Monthly"
+        else (s["amount"] * 4.33 if s.get("billing_cycle") == "Weekly" else s["amount"] / 12)
+        for s in subscriptions if s.get("is_active")
+    )
+    
+    return render_template(
+        "subscriptions.html",
+        subscriptions=subscriptions,
+        categories=categories,
+        accounts=accounts,
+        upcoming=upcoming,
+        total_monthly=round(total_monthly, 2),
+        active_page="subscriptions"
+    )
+
+@app.route("/goals")
+@login_required
+def goals_page():
+    """Financial goals & savings pockets view (v2.0)."""
+    user = get_current_user()
+    user_id = user["id"]
+    goals = database.get_goals(user_id=user_id)
+    accounts = database.get_bank_accounts(user_id=user_id)
+    
+    total_target = sum(g["target_amount"] for g in goals)
+    total_saved = sum(g["current_amount"] for g in goals)
+    overall_progress = round((total_saved / total_target * 100), 1) if total_target > 0 else 0.0
+    
+    return render_template(
+        "goals.html",
+        goals=goals,
+        accounts=accounts,
+        total_target=round(total_target, 2),
+        total_saved=round(total_saved, 2),
+        overall_progress=overall_progress,
+        active_page="goals"
+    )
+
+@app.route("/statement")
+@login_required
+def statement_page():
+    """Publication-grade printable financial statement & PDF export (v2.0)."""
+    user = get_current_user()
+    user_id = user["id"]
+    month = request.args.get("month", date.today().strftime("%Y-%m"))
+    
+    metrics = database.get_monthly_metrics(month, user_id=user_id)
+    categories = database.get_category_breakdown(month, user_id=user_id)
+    expenses = database.get_expenses(start_date=f"{month}-01", end_date=f"{month}-31", user_id=user_id)
+    incomes = database.get_income_list(user_id=user_id, start_date=f"{month}-01", end_date=f"{month}-31")
+    accounts = database.get_bank_accounts(user_id=user_id)
+    cash_flow = database.get_cash_flow_summary(user_id=user_id, month_str=month)
+    
+    try:
+        dt = datetime.strptime(month, "%Y-%m")
+        month_name = dt.strftime("%B %Y")
+    except Exception:
+        month_name = month
+        
+    return render_template(
+        "statement.html",
+        selected_month=month,
+        month_name=month_name,
+        metrics=metrics,
+        categories=categories,
+        expenses=expenses,
+        incomes=incomes,
+        accounts=accounts,
+        cash_flow=cash_flow,
+        active_page="statement"
+    )
+
 @app.route("/reports")
 @login_required
 def reports_page():
@@ -234,6 +403,8 @@ def reports_page():
     metrics = database.get_monthly_metrics(month, user_id=user_id)
     categories = database.get_category_breakdown(month, user_id=user_id)
     payment_methods = database.get_payment_method_breakdown(month, user_id=user_id)
+    cash_flow = database.get_cash_flow_summary(user_id=user_id, month_str=month)
+    smart_insights = analytics_service.generate_smart_insights(user_id=user_id, month_str=month)
     
     return render_template(
         "reports.html",
@@ -241,6 +412,8 @@ def reports_page():
         metrics=metrics,
         categories=categories,
         payment_methods=payment_methods,
+        cash_flow=cash_flow,
+        smart_insights=smart_insights,
         active_page="reports"
     )
 
@@ -269,12 +442,26 @@ def accounts_page():
     user_id = user["id"]
     accounts = database.get_bank_accounts(user_id=user_id)
     combined = database.get_combined_balance(user_id=user_id)
+    transfers = database.get_transfers(user_id=user_id, limit=20)
     return render_template(
         "accounts.html",
         accounts=accounts,
         combined=combined,
+        transfers=transfers,
         active_page="accounts"
     )
+
+# ==================== PWA Routes ====================
+
+@app.route("/manifest.json")
+def pwa_manifest():
+    return send_from_directory(os.path.join(app.root_path, "static"), "manifest.json", mimetype="application/manifest+json")
+
+@app.route("/service-worker.js")
+def pwa_service_worker():
+    response = send_from_directory(os.path.join(app.root_path, "static"), "service-worker.js", mimetype="application/javascript")
+    response.headers["Service-Worker-Allowed"] = "/"
+    return response
 
 # ==================== JSON API Endpoints ====================
 
@@ -310,7 +497,7 @@ def api_chart_data():
 @app.route("/api/expense", methods=["POST"])
 @login_required
 def api_add_expense():
-    """Add a new expense."""
+    """Add a new expense with optional receipt attachment."""
     user = get_current_user()
     user_id = user["id"]
     data = request.get_json() if request.is_json else request.form
@@ -329,6 +516,16 @@ def api_add_expense():
         if amount <= 0:
             return jsonify({"success": False, "error": "Amount must be greater than zero"}), 400
             
+        receipt_filename = None
+        if "receipt" in request.files:
+            file = request.files["receipt"]
+            if file and file.filename:
+                ext = os.path.splitext(secure_filename(file.filename))[1].lower()
+                if ext.lstrip(".") in ALLOWED_RECEIPT_EXTENSIONS:
+                    unique_name = f"{uuid.uuid4().hex}{ext}"
+                    file.save(os.path.join(app.config["UPLOAD_FOLDER"], unique_name))
+                    receipt_filename = unique_name
+
         expense_id = database.add_expense(
             expense_date=exp_date,
             category_id=category_id,
@@ -337,7 +534,8 @@ def api_add_expense():
             description=description,
             notes=notes,
             user_id=user_id,
-            account_id=account_id
+            account_id=account_id,
+            receipt_filename=receipt_filename
         )
         return jsonify({"success": True, "id": expense_id, "message": "Expense added successfully!"})
     except Exception as e:
@@ -356,7 +554,7 @@ def api_get_expense(expense_id):
 @app.route("/api/expense/<int:expense_id>", methods=["PUT", "POST"])
 @login_required
 def api_update_expense(expense_id):
-    """Update an existing expense."""
+    """Update an existing expense with optional receipt replacement."""
     user = get_current_user()
     data = request.get_json() if request.is_json else request.form
     try:
@@ -374,6 +572,16 @@ def api_update_expense(expense_id):
         if amount <= 0:
             return jsonify({"success": False, "error": "Amount must be greater than zero"}), 400
             
+        receipt_filename = None
+        if "receipt" in request.files:
+            file = request.files["receipt"]
+            if file and file.filename:
+                ext = os.path.splitext(secure_filename(file.filename))[1].lower()
+                if ext.lstrip(".") in ALLOWED_RECEIPT_EXTENSIONS:
+                    unique_name = f"{uuid.uuid4().hex}{ext}"
+                    file.save(os.path.join(app.config["UPLOAD_FOLDER"], unique_name))
+                    receipt_filename = unique_name
+
         updated = database.update_expense(
             expense_id=expense_id,
             expense_date=exp_date,
@@ -383,7 +591,8 @@ def api_update_expense(expense_id):
             description=description,
             notes=notes,
             user_id=user["id"],
-            account_id=account_id
+            account_id=account_id,
+            receipt_filename=receipt_filename
         )
         if not updated:
             return jsonify({"success": False, "error": "Expense not found"}), 404
@@ -403,6 +612,459 @@ def api_delete_expense(expense_id):
         return jsonify({"success": True, "message": "Expense deleted successfully!"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
+
+# ==================== Income APIs (v2.0) ====================
+
+@app.route("/api/income", methods=["GET", "POST"])
+@login_required
+def api_income_collection():
+    """List all income or create a new income stream."""
+    user = get_current_user()
+    if request.method == "GET":
+        month = request.args.get("month")
+        incomes = database.get_income(user_id=user["id"], month_str=month)
+        return jsonify({"success": True, "income": incomes})
+
+    data = request.get_json() if request.is_json else request.form
+    try:
+        inc_date = data.get("date") or date.today().isoformat()
+        source = data.get("source", "").strip()
+        amount = float(data.get("amount") or 0.0)
+        payment_method = data.get("payment_method", "Bank Transfer").strip()
+        notes = data.get("notes", "").strip()
+        account_id = data.get("account_id") or data.get("bank_account_id")
+        account_id = int(account_id) if account_id and str(account_id).isdigit() else None
+        
+        if not source:
+            return jsonify({"success": False, "error": "Income source is required"}), 400
+        if amount <= 0:
+            return jsonify({"success": False, "error": "Amount must be greater than zero"}), 400
+            
+        income_id = database.add_income(
+            date_str=inc_date,
+            source=source,
+            amount=amount,
+            payment_method=payment_method,
+            account_id=account_id,
+            notes=notes,
+            user_id=user["id"]
+        )
+        created = database.get_income_by_id(income_id, user_id=user["id"])
+        return jsonify({"success": True, "id": income_id, "income": created, "message": "Income added successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route("/api/income/<int:income_id>", methods=["GET"])
+@login_required
+def api_get_income(income_id):
+    user = get_current_user()
+    inc = database.get_income_by_id(income_id, user_id=user["id"])
+    if not inc:
+        return jsonify({"success": False, "error": "Income record not found"}), 404
+    return jsonify({"success": True, "income": inc})
+
+@app.route("/api/income/<int:income_id>", methods=["PUT", "POST"])
+@login_required
+def api_update_income(income_id):
+    user = get_current_user()
+    data = request.get_json() if request.is_json else request.form
+    try:
+        inc_date = data.get("date") or date.today().isoformat()
+        source = data.get("source", "").strip()
+        amount = float(data.get("amount") or 0.0)
+        payment_method = data.get("payment_method", "Bank Transfer").strip()
+        notes = data.get("notes", "").strip()
+        account_id = data.get("account_id")
+        account_id = int(account_id) if account_id and str(account_id).isdigit() else None
+        
+        if not source:
+            return jsonify({"success": False, "error": "Income source is required"}), 400
+        if amount <= 0:
+            return jsonify({"success": False, "error": "Amount must be greater than zero"}), 400
+            
+        updated = database.update_income(
+            income_id=income_id,
+            date_str=inc_date,
+            source=source,
+            amount=amount,
+            payment_method=payment_method,
+            account_id=account_id,
+            notes=notes,
+            user_id=user["id"]
+        )
+        if not updated:
+            return jsonify({"success": False, "error": "Income record not found"}), 404
+        return jsonify({"success": True, "message": "Income updated successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route("/api/income/<int:income_id>", methods=["DELETE"])
+@app.route("/api/income/<int:income_id>/delete", methods=["POST", "DELETE"])
+@login_required
+def api_delete_income(income_id):
+    user = get_current_user()
+    try:
+        deleted = database.delete_income(income_id, user_id=user["id"])
+        if not deleted:
+            return jsonify({"success": False, "error": "Income record not found"}), 404
+        return jsonify({"success": True, "message": "Income record deleted successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+# ==================== Account Transfers APIs (v2.0) ====================
+
+@app.route("/api/transfer", methods=["POST"])
+@login_required
+def api_add_transfer():
+    user = get_current_user()
+    data = request.get_json() if request.is_json else request.form
+    try:
+        t_date = data.get("date") or data.get("transfer_date") or date.today().isoformat()
+        from_acc = int(data.get("from_account_id"))
+        to_acc = int(data.get("to_account_id"))
+        amount = float(data.get("amount") or 0.0)
+        notes = data.get("notes", "").strip()
+        
+        if from_acc == to_acc:
+            return jsonify({"success": False, "error": "Source and destination accounts must be different"}), 400
+        if amount <= 0:
+            return jsonify({"success": False, "error": "Amount must be positive"}), 400
+            
+        t_id = database.add_transfer(
+            date_str=t_date,
+            from_account_id=from_acc,
+            to_account_id=to_acc,
+            amount=amount,
+            notes=notes,
+            user_id=user["id"]
+        )
+        return jsonify({"success": True, "id": t_id, "message": "Transfer completed successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route("/api/transfer/<int:transfer_id>/delete", methods=["POST", "DELETE"])
+@login_required
+def api_delete_transfer(transfer_id):
+    user = get_current_user()
+    try:
+        deleted = database.delete_transfer(transfer_id, user_id=user["id"])
+        if not deleted:
+            return jsonify({"success": False, "error": "Transfer record not found"}), 404
+        return jsonify({"success": True, "message": "Transfer record deleted successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+# ==================== Subscriptions APIs (v2.0) ====================
+
+@app.route("/api/subscription", methods=["GET", "POST"])
+@login_required
+def api_subscription_collection():
+    user = get_current_user()
+    if request.method == "GET":
+        active_only = request.args.get("active") == "1"
+        subs = database.get_subscriptions(user_id=user["id"], active_only=active_only)
+        return jsonify({"success": True, "subscriptions": subs})
+
+    data = request.get_json() if request.is_json else request.form
+    try:
+        name = data.get("name", "").strip()
+        amount = float(data.get("amount") or 0.0)
+        category_id = data.get("category_id")
+        category_id = int(category_id) if category_id and str(category_id).isdigit() else None
+        account_id = data.get("account_id") or data.get("bank_account_id")
+        account_id = int(account_id) if account_id and str(account_id).isdigit() else None
+        billing_cycle = data.get("billing_cycle", "Monthly").strip()
+        billing_day = int(data.get("billing_day") or 1)
+        next_due_date = data.get("next_due_date") or date.today().isoformat()
+        notes = data.get("notes", "").strip()
+        auto_log = int(data.get("auto_log", 0))
+        
+        if not name:
+            return jsonify({"success": False, "error": "Subscription name is required"}), 400
+        if amount <= 0:
+            return jsonify({"success": False, "error": "Amount must be positive"}), 400
+            
+        sub_id = database.add_subscription(
+            name=name,
+            amount=amount,
+            category_id=category_id,
+            account_id=account_id,
+            billing_cycle=billing_cycle,
+            billing_day=billing_day,
+            next_due_date=next_due_date,
+            notes=notes,
+            auto_log=auto_log,
+            user_id=user["id"]
+        )
+        created = database.get_subscription_by_id(sub_id, user_id=user["id"])
+        return jsonify({"success": True, "id": sub_id, "subscription": created, "message": "Subscription added successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route("/api/subscription/<int:sub_id>", methods=["GET"])
+@login_required
+def api_get_subscription(sub_id):
+    user = get_current_user()
+    sub = database.get_subscription_by_id(sub_id, user_id=user["id"])
+    if not sub:
+        return jsonify({"success": False, "error": "Subscription not found"}), 404
+    return jsonify({"success": True, "subscription": sub})
+
+@app.route("/api/subscription/<int:sub_id>", methods=["PUT", "POST"])
+@login_required
+def api_update_subscription(sub_id):
+    user = get_current_user()
+    data = request.get_json() if request.is_json else request.form
+    try:
+        name = data.get("name", "").strip()
+        amount = float(data.get("amount") or 0.0)
+        category_id = data.get("category_id")
+        category_id = int(category_id) if category_id and str(category_id).isdigit() else None
+        account_id = data.get("account_id")
+        account_id = int(account_id) if account_id and str(account_id).isdigit() else None
+        billing_cycle = data.get("billing_cycle", "Monthly").strip()
+        billing_day = int(data.get("billing_day") or 1)
+        next_due_date = data.get("next_due_date") or date.today().isoformat()
+        is_active = int(data.get("is_active", 1))
+        notes = data.get("notes", "").strip()
+        auto_log = int(data.get("auto_log", 0))
+        
+        if not name:
+            return jsonify({"success": False, "error": "Subscription name is required"}), 400
+        if amount <= 0:
+            return jsonify({"success": False, "error": "Amount must be positive"}), 400
+            
+        updated = database.update_subscription(
+            sub_id=sub_id,
+            name=name,
+            amount=amount,
+            category_id=category_id,
+            account_id=account_id,
+            billing_cycle=billing_cycle,
+            billing_day=billing_day,
+            next_due_date=next_due_date,
+            is_active=is_active,
+            notes=notes,
+            auto_log=auto_log,
+            user_id=user["id"]
+        )
+        if not updated:
+            return jsonify({"success": False, "error": "Subscription not found"}), 404
+        return jsonify({"success": True, "message": "Subscription updated successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route("/api/subscription/<int:sub_id>", methods=["DELETE"])
+@app.route("/api/subscription/<int:sub_id>/delete", methods=["POST", "DELETE"])
+@login_required
+def api_delete_subscription(sub_id):
+    user = get_current_user()
+    try:
+        deleted = database.delete_subscription(sub_id, user_id=user["id"])
+        if not deleted:
+            return jsonify({"success": False, "error": "Subscription not found"}), 404
+        return jsonify({"success": True, "message": "Subscription deleted successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route("/api/subscription/<int:sub_id>/pay", methods=["POST"])
+@login_required
+def api_pay_subscription(sub_id):
+    """1-click logs subscription as expense and advances its next due date."""
+    user = get_current_user()
+    try:
+        next_date = database.mark_subscription_paid(sub_id, user_id=user["id"])
+        return jsonify({"success": True, "next_due_date": next_date, "message": f"Bill paid and advanced to {next_date}!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+# ==================== Goals APIs (v2.0) ====================
+
+@app.route("/api/goal", methods=["GET", "POST"])
+@login_required
+def api_goal_collection():
+    user = get_current_user()
+    if request.method == "GET":
+        goals = database.get_goals(user_id=user["id"])
+        return jsonify({"success": True, "goals": goals})
+
+    data = request.get_json() if request.is_json else request.form
+    try:
+        name = data.get("name", "").strip()
+        target_amount = float(data.get("target_amount") or 0.0)
+        current_amount = float(data.get("current_amount") or 0.0)
+        target_date = data.get("target_date") or None
+        color = data.get("color", "#10B981").strip()
+        icon = data.get("icon", "bullseye").strip()
+        account_id = data.get("account_id") or data.get("bank_account_id")
+        account_id = int(account_id) if account_id and str(account_id).isdigit() else None
+        notes = data.get("notes", "").strip()
+        
+        if not name:
+            return jsonify({"success": False, "error": "Goal name is required"}), 400
+        if target_amount <= 0:
+            return jsonify({"success": False, "error": "Target amount must be positive"}), 400
+            
+        goal_id = database.add_goal(
+            name=name,
+            target_amount=target_amount,
+            current_amount=current_amount,
+            target_date=target_date,
+            color=color,
+            icon=icon,
+            account_id=account_id,
+            notes=notes,
+            user_id=user["id"]
+        )
+        created = database.get_goal_by_id(goal_id, user_id=user["id"])
+        return jsonify({"success": True, "id": goal_id, "goal": created, "message": "Goal created successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route("/api/goal/<int:goal_id>", methods=["GET"])
+@login_required
+def api_get_goal(goal_id):
+    user = get_current_user()
+    g = database.get_goal_by_id(goal_id, user_id=user["id"])
+    if not g:
+        return jsonify({"success": False, "error": "Goal not found"}), 404
+    return jsonify({"success": True, "goal": g})
+
+@app.route("/api/goal/<int:goal_id>", methods=["PUT", "POST"])
+@login_required
+def api_update_goal(goal_id):
+    user = get_current_user()
+    data = request.get_json() if request.is_json else request.form
+    try:
+        name = data.get("name", "").strip()
+        target_amount = float(data.get("target_amount") or 0.0)
+        current_amount = float(data.get("current_amount") or 0.0)
+        target_date = data.get("target_date") or None
+        color = data.get("color", "#10B981").strip()
+        icon = data.get("icon", "bullseye").strip()
+        account_id = data.get("account_id")
+        account_id = int(account_id) if account_id and str(account_id).isdigit() else None
+        notes = data.get("notes", "").strip()
+        
+        if not name:
+            return jsonify({"success": False, "error": "Goal name is required"}), 400
+        if target_amount <= 0:
+            return jsonify({"success": False, "error": "Target amount must be positive"}), 400
+            
+        updated = database.update_goal(
+            goal_id=goal_id,
+            name=name,
+            target_amount=target_amount,
+            current_amount=current_amount,
+            target_date=target_date,
+            color=color,
+            icon=icon,
+            account_id=account_id,
+            notes=notes,
+            user_id=user["id"]
+        )
+        if not updated:
+            return jsonify({"success": False, "error": "Goal not found"}), 404
+        return jsonify({"success": True, "message": "Goal updated successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route("/api/goal/<int:goal_id>/contribute", methods=["POST"])
+@login_required
+def api_contribute_goal(goal_id):
+    user = get_current_user()
+    data = request.get_json() if request.is_json else request.form
+    try:
+        amount = float(data.get("amount") or 0.0)
+        from_account_id = data.get("from_account_id") or data.get("bank_account_id") or data.get("account_id")
+        from_account_id = int(from_account_id) if from_account_id and str(from_account_id).isdigit() else None
+        
+        if amount <= 0:
+            return jsonify({"success": False, "error": "Contribution amount must be positive"}), 400
+            
+        new_total = database.contribute_to_goal(goal_id, amount, from_account_id=from_account_id, user_id=user["id"])
+        goal_data = database.get_goal_by_id(goal_id, user_id=user["id"])
+        return jsonify({
+            "success": True,
+            "current_amount": new_total,
+            "goal": goal_data,
+            "message": f"Contributed successfully! Current total: {new_total}"
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route("/api/goal/<int:goal_id>", methods=["DELETE"])
+@app.route("/api/goal/<int:goal_id>/delete", methods=["POST", "DELETE"])
+@login_required
+def api_delete_goal(goal_id):
+    user = get_current_user()
+    try:
+        deleted = database.delete_goal(goal_id, user_id=user["id"])
+        if not deleted:
+            return jsonify({"success": False, "error": "Goal not found"}), 404
+        return jsonify({"success": True, "message": "Goal deleted successfully!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+# ==================== Smart AI Insights API (v2.0) ====================
+
+@app.route("/api/insights")
+@login_required
+def api_get_insights():
+    user = get_current_user()
+    month = request.args.get("month", date.today().strftime("%Y-%m"))
+    insights = analytics_service.generate_smart_insights(user_id=user["id"], month_str=month)
+    return jsonify({"success": True, "insights": insights})
+
+# ==================== Two-Factor Authentication Security APIs (v2.0) ====================
+
+@app.route("/api/2fa/setup", methods=["POST"])
+@login_required
+def api_2fa_setup():
+    user = get_current_user()
+    secret = auth_service.generate_totp_secret()
+    uri = auth_service.get_totp_uri(secret, user["username"])
+    return jsonify({
+        "success": True,
+        "secret": secret,
+        "uri": uri,
+        "username": user["username"]
+    })
+
+@app.route("/api/2fa/verify-and-enable", methods=["POST"])
+@login_required
+def api_2fa_verify_and_enable():
+    user = get_current_user()
+    data = request.get_json() if request.is_json else request.form
+    secret = data.get("secret", "").strip()
+    code = data.get("code", "").strip()
+    
+    if not secret or not code:
+        return jsonify({"success": False, "error": "Secret and verification code are required"}), 400
+        
+    if auth_service.verify_totp_code(secret, code):
+        database.update_user_2fa(user["id"], enabled=True, secret=secret)
+        return jsonify({"success": True, "message": "Two-Factor Authentication is now enabled!"})
+    else:
+        return jsonify({"success": False, "error": "Invalid 6-digit verification code. Please check your authenticator app and try again."}), 400
+
+@app.route("/api/2fa/disable", methods=["POST"])
+@login_required
+def api_2fa_disable():
+    user = get_current_user()
+    database.update_user_2fa(user["id"], enabled=False)
+    return jsonify({"success": True, "message": "Two-Factor Authentication has been disabled."})
+
+@app.route("/api/2fa/status", methods=["GET"])
+@login_required
+def api_2fa_status():
+    user = get_current_user()
+    info = database.get_user_2fa_info(user["id"])
+    return jsonify({
+        "success": True,
+        "enabled": bool(info.get("two_factor_enabled")),
+        "has_secret": bool(info.get("totp_secret"))
+    })
 
 # ==================== Bank Account APIs ====================
 

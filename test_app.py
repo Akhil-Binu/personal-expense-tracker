@@ -372,5 +372,228 @@ class ExpenseTrackerTestCase(unittest.TestCase):
         self.assertTrue(json_res["success"])
         self.assertGreaterEqual(json_res["details"]["imported"], 1)
 
+    def test_v2_pages_and_pwa_assets(self):
+        """Test v2.0 pages render and PWA manifest/service worker load."""
+        for path in ["/income", "/subscriptions", "/goals", "/statement"]:
+            res = self.client.get(path)
+            self.assertEqual(res.status_code, 200, f"Page {path} failed to load")
+
+        # PWA manifest
+        res_manifest = self.client.get("/manifest.json")
+        self.assertEqual(res_manifest.status_code, 200)
+        self.assertIn(b"FinanceFlow", res_manifest.data)
+
+        # Service worker
+        res_sw = self.client.get("/service-worker.js")
+        self.assertEqual(res_sw.status_code, 200)
+        self.assertIn(b"financeflow-v2.0.0", res_sw.data)
+
+    def test_income_and_transfers_api(self):
+        """Test Income CRUD and Inter-Account Transfers."""
+        # Add income
+        income_payload = {
+            "source": "Consulting Project",
+            "amount": 2500.0,
+            "category": "Freelance",
+            "date": "2026-10-15",
+            "bank_account_id": 1,
+            "notes": "Q4 strategy advisory"
+        }
+        res = self.client.post("/api/income", json=income_payload)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data["success"])
+        income_id = data["income"]["id"]
+
+        # List income
+        res_list = self.client.get("/api/income")
+        self.assertEqual(res_list.status_code, 200)
+        items = res_list.get_json()["income"]
+        self.assertTrue(any(i["id"] == income_id for i in items))
+
+        # Check Cash Flow summary
+        cf = database.get_cash_flow_summary(user_id=1)
+        self.assertGreaterEqual(cf["total_income"], 2500.0)
+
+        # Inter-Account Transfer (Account 1 to Account 2)
+        accounts = database.get_bank_accounts(user_id=1)
+        if len(accounts) >= 2:
+            from_acc = accounts[0]["id"]
+            to_acc = accounts[1]["id"]
+            from_init = accounts[0]["current_balance"]
+            to_init = accounts[1]["current_balance"]
+
+            transfer_payload = {
+                "from_account_id": from_acc,
+                "to_account_id": to_acc,
+                "amount": 300.0,
+                "transfer_date": "2026-10-20",
+                "notes": "Emergency fund deposit"
+            }
+            res_tf = self.client.post("/api/transfer", json=transfer_payload)
+            self.assertEqual(res_tf.status_code, 200)
+            tf_data = res_tf.get_json()
+            self.assertTrue(tf_data["success"])
+
+            # Verify balance updates
+            acc1 = database.get_bank_account_by_id(from_acc, user_id=1)
+            acc2 = database.get_bank_account_by_id(to_acc, user_id=1)
+            self.assertAlmostEqual(acc1["current_balance"], from_init - 300.0, places=2)
+            self.assertAlmostEqual(acc2["current_balance"], to_init + 300.0, places=2)
+
+        # Delete income
+        res_del = self.client.delete(f"/api/income/{income_id}")
+        self.assertEqual(res_del.status_code, 200)
+        self.assertTrue(res_del.get_json()["success"])
+
+    def test_subscriptions_and_mark_paid(self):
+        """Test recurring subscriptions lifecycle and 1-click pay."""
+        sub_payload = {
+            "name": "Cloud Hosting Pro",
+            "amount": 49.99,
+            "billing_cycle": "Monthly",
+            "next_due_date": "2026-11-01",
+            "category_id": 1,
+            "bank_account_id": 1,
+            "notes": "Production server"
+        }
+        res = self.client.post("/api/subscription", json=sub_payload)
+        self.assertEqual(res.status_code, 200)
+        sub = res.get_json()["subscription"]
+        sub_id = sub["id"]
+
+        # List subscriptions
+        res_list = self.client.get("/api/subscription")
+        self.assertEqual(res_list.status_code, 200)
+        subs = res_list.get_json()["subscriptions"]
+        self.assertTrue(any(s["id"] == sub_id for s in subs))
+
+        # Mark paid
+        expenses_before = len(database.get_expenses(user_id=1))
+        res_pay = self.client.post(f"/api/subscription/{sub_id}/pay")
+        self.assertEqual(res_pay.status_code, 200)
+        self.assertTrue(res_pay.get_json()["success"])
+
+        # Check expense was recorded
+        expenses_after = len(database.get_expenses(user_id=1))
+        self.assertEqual(expenses_after, expenses_before + 1)
+
+        # Delete subscription
+        res_del = self.client.delete(f"/api/subscription/{sub_id}")
+        self.assertEqual(res_del.status_code, 200)
+        self.assertTrue(res_del.get_json()["success"])
+
+    def test_goals_and_contributions(self):
+        """Test savings goals and contributions."""
+        goal_payload = {
+            "name": "Japan Trip 2027",
+            "target_amount": 4000.0,
+            "target_date": "2027-04-01",
+            "icon": "bi-airplane",
+            "color": "#0ea5e9",
+            "notes": "Flights and ryokan"
+        }
+        res = self.client.post("/api/goal", json=goal_payload)
+        self.assertEqual(res.status_code, 200)
+        goal = res.get_json()["goal"]
+        goal_id = goal["id"]
+
+        # Contribute to goal
+        res_contrib = self.client.post(f"/api/goal/{goal_id}/contribute", json={
+            "amount": 500.0,
+            "bank_account_id": 1,
+            "category_id": 1
+        })
+        self.assertEqual(res_contrib.status_code, 200)
+        contrib_data = res_contrib.get_json()
+        self.assertTrue(contrib_data["success"])
+        self.assertAlmostEqual(contrib_data["goal"]["current_amount"], 500.0)
+
+        # Delete goal
+        res_del = self.client.delete(f"/api/goal/{goal_id}")
+        self.assertEqual(res_del.status_code, 200)
+        self.assertTrue(res_del.get_json()["success"])
+
+    def test_two_factor_auth_flow(self):
+        """Test RFC 6238 TOTP 2FA setup, verify, and disable."""
+        import auth_service
+
+        # 1. Initiate 2FA setup via POST
+        res_setup = self.client.post("/api/2fa/setup")
+        self.assertEqual(res_setup.status_code, 200)
+        setup_data = res_setup.get_json()
+        self.assertTrue(setup_data["success"])
+        secret = setup_data["secret"]
+        self.assertTrue(len(secret) >= 16)
+
+        # 2. Generate valid TOTP code
+        code = auth_service.generate_totp_code(secret)
+        self.assertEqual(len(code), 6)
+
+        # 3. Verify and enable with secret + code
+        res_enable = self.client.post("/api/2fa/verify-and-enable", json={"secret": secret, "code": code})
+        self.assertEqual(res_enable.status_code, 200)
+        self.assertTrue(res_enable.get_json()["success"])
+
+        # Check status
+        res_status = self.client.get("/api/2fa/status")
+        self.assertTrue(res_status.get_json()["enabled"])
+
+        # 4. Disable 2FA
+        res_disable = self.client.post("/api/2fa/disable")
+        self.assertEqual(res_disable.status_code, 200)
+        self.assertTrue(res_disable.get_json()["success"])
+
+    def test_analytics_and_insights(self):
+        """Test smart AI insights and budget velocity."""
+        import analytics_service
+        # API insights test
+        res = self.client.get("/api/insights")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data["success"])
+        insights = data["insights"]
+        self.assertIsInstance(insights, list)
+        self.assertGreaterEqual(len(insights), 1)
+        self.assertIn("title", insights[0])
+        self.assertIn("message", insights[0])
+
+        # Velocity calculation service test
+        velocity = analytics_service.calculate_budget_velocity(user_id=1)
+        self.assertIn("velocity_ratio", velocity)
+        self.assertIn("status", velocity)
+        self.assertIn("daily_run_rate", velocity)
+        self.assertIn("month_pct_elapsed", velocity)
+
+    def test_printable_statement_and_receipt_upload(self):
+        """Test receipt attachment upload and printable financial statement rendering."""
+        # 1. Add expense with receipt attachment
+        dummy_receipt = (io.BytesIO(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR...fake-png"), "receipt.png")
+        data = {
+            "date": "2026-10-25",
+            "category_id": "1",
+            "amount": "142.50",
+            "payment_method": "Credit Card",
+            "description": "Team lunch at Bistro",
+            "notes": "Quarterly milestone celebration",
+            "receipt": dummy_receipt
+        }
+        res_exp = self.client.post("/api/expense", data=data, content_type="multipart/form-data")
+        self.assertEqual(res_exp.status_code, 200)
+        exp_id = res_exp.get_json()["id"]
+
+        # Fetch expense and check receipt was persisted
+        exp = database.get_expense_by_id(exp_id, user_id=1)
+        self.assertIsNotNone(exp["receipt_filename"])
+        self.assertTrue(exp["receipt_filename"].endswith(".png"))
+
+        # 2. Render printable statement
+        res_stmt = self.client.get("/statement?start_date=2026-10-01&end_date=2026-10-31")
+        self.assertEqual(res_stmt.status_code, 200)
+        self.assertIn(b"Financial Statement", res_stmt.data)
+        self.assertIn(b"Cash Flow Summary", res_stmt.data)
+        self.assertIn(b"Team lunch at Bistro", res_stmt.data)
+
+
 if __name__ == "__main__":
     unittest.main()

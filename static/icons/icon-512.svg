@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="flowGrad512" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0D9488" />
+      <stop offset="100%" stop-color="#0284C7" />
+    </linearGradient>
+    <filter id="shadow512" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#0F172A" flood-opacity="0.35" />
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#flowGrad512)" />
+  <!-- Wallet / Bank Flow Icon -->
+  <g transform="translate(96, 96)" filter="url(#shadow512)">
+    <rect x="16" y="64" width="288" height="192" rx="42" fill="#FFFFFF" fill-opacity="0.95" />
+    <path d="M 48 64 L 48 48 C 48 26 64 16 85 16 L 235 16 C 256 16 272 26 272 48 L 272 64" fill="none" stroke="#FFFFFF" stroke-width="20" stroke-linecap="round" />
+    <!-- Flap / Card -->
+    <path d="M 176 128 L 304 128 C 312 128 320 138 320 148 L 320 172 C 320 182 312 192 304 192 L 176 192 Z" fill="#0D9488" />
+    <circle cx="260" cy="160" r="14" fill="#FFFFFF" />
+    <!-- Trending Up Arrow -->
+    <path d="M 74 192 L 122 144 L 154 176 L 202 118" fill="none" stroke="#0D9488" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M 170 118 L 202 118 L 202 150" fill="none" stroke="#0D9488" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+</svg>

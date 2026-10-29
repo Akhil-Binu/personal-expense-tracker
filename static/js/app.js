@@ -435,15 +435,21 @@ async function handleExpenseSubmit(e) {
     const id = document.getElementById("expenseId").value;
     const isEdit = Boolean(id);
 
-    const payload = {
-        amount: document.getElementById("expenseAmount").value,
-        description: document.getElementById("expenseDescription").value,
-        category_id: document.getElementById("expenseCategory").value,
-        account_id: document.getElementById("expenseAccount")?.value || null,
-        date: document.getElementById("expenseDate").value,
-        payment_method: document.querySelector('input[name="payment_method"]:checked')?.value || "Cash",
-        notes: document.getElementById("expenseNotes").value
-    };
+    const formData = new FormData();
+    formData.append("amount", document.getElementById("expenseAmount").value);
+    formData.append("description", document.getElementById("expenseDescription").value);
+    formData.append("category_id", document.getElementById("expenseCategory").value);
+    formData.append("date", document.getElementById("expenseDate").value);
+    formData.append("payment_method", document.querySelector('input[name="payment_method"]:checked')?.value || "Cash");
+    formData.append("notes", document.getElementById("expenseNotes").value || "");
+    
+    const accId = document.getElementById("expenseAccount")?.value;
+    if (accId) formData.append("account_id", accId);
+
+    const receiptFile = document.getElementById("expenseReceipt")?.files[0];
+    if (receiptFile) {
+        formData.append("receipt", receiptFile);
+    }
 
     try {
         const url = isEdit ? `/api/expense/${id}` : "/api/expense";
@@ -451,8 +457,7 @@ async function handleExpenseSubmit(e) {
 
         const res = await fetch(url, {
             method: method,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
+            body: formData
         });
 
         const data = await res.json();
@@ -982,3 +987,742 @@ async function handleSaveMonthlyBudget() {
 function openQuickCategoryBudgetEdit(catId, catName, currentBudget) {
     openEditMonthlyBudgetModal(catId);
 }
+
+// ============================================================
+// FinanceFlow v2.0 Additions: PWA, Income, Transfers,
+// Subscriptions, Goals, AI Receipt OCR, 2FA Security
+// ============================================================
+
+// --- 1. PWA Service Worker Registration ---
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/static/service-worker.js')
+            .then(reg => console.log('FinanceFlow PWA Worker active:', reg.scope))
+            .catch(err => console.warn('PWA Worker registration failed:', err));
+    });
+}
+
+// --- 2. Receipt Attachment, Lightbox & Smart AI OCR ---
+let currentReceiptPreviewUrl = null;
+
+function previewReceiptFile(input) {
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+        document.getElementById("receiptLabelText").textContent = file.name;
+        
+        if (file.type.startsWith("image/")) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                currentReceiptPreviewUrl = e.target.result;
+                const thumb = document.getElementById("receiptPreviewThumb");
+                const img = document.getElementById("receiptThumbImg");
+                img.src = e.target.result;
+                thumb.classList.remove("hidden");
+            };
+            reader.readAsDataURL(file);
+        } else {
+            currentReceiptPreviewUrl = null;
+            document.getElementById("receiptPreviewThumb").classList.add("hidden");
+        }
+    }
+}
+
+function viewAttachedReceipt() {
+    if (currentReceiptPreviewUrl) {
+        viewReceiptImage(currentReceiptPreviewUrl);
+    }
+}
+
+function viewReceiptImage(url) {
+    const modal = document.getElementById("receiptLightboxModal");
+    const img = document.getElementById("lightboxImg");
+    img.src = url;
+    modal.classList.remove("hidden");
+    document.body.classList.add("overflow-hidden");
+}
+
+function closeReceiptLightbox() {
+    const modal = document.getElementById("receiptLightboxModal");
+    modal.classList.add("hidden");
+    document.body.classList.remove("overflow-hidden");
+}
+
+function openReceiptScanner() {
+    const modal = document.getElementById("ocrScannerModal");
+    modal.classList.remove("hidden");
+    document.getElementById("ocrProgressBox").classList.add("hidden");
+    document.getElementById("ocrResultsBox").classList.add("hidden");
+    document.getElementById("ocrUploadZone").classList.remove("hidden");
+}
+
+function closeReceiptScanner() {
+    document.getElementById("ocrScannerModal").classList.add("hidden");
+}
+
+let ocrDetectedData = { amount: 0, date: "", merchant: "" };
+
+async function runReceiptOcr(input) {
+    if (!input.files || !input.files[0]) return;
+    const file = input.files[0];
+
+    document.getElementById("ocrUploadZone").classList.add("hidden");
+    const progressBox = document.getElementById("ocrProgressBox");
+    progressBox.classList.remove("hidden");
+
+    const statusText = document.getElementById("ocrStatusText");
+    const percentText = document.getElementById("ocrPercentText");
+    const progressBar = document.getElementById("ocrProgressBar");
+
+    try {
+        statusText.textContent = "Loading AI OCR Model...";
+        percentText.textContent = "10%";
+        progressBar.style.width = "10%";
+
+        const worker = await Tesseract.createWorker("eng");
+        
+        statusText.textContent = "Scanning receipt image...";
+        percentText.textContent = "40%";
+        progressBar.style.width = "40%";
+
+        const ret = await worker.recognize(file);
+        const text = ret.data.text;
+        await worker.terminate();
+
+        progressBar.style.width = "100%";
+        percentText.textContent = "100%";
+        statusText.textContent = "Extraction complete!";
+
+        // Extract Amounts: Find all dollar patterns $XX.XX or XX.XX
+        const amountRegex = /(?:[$€£₹¥]\s*)?([0-9]{1,5}\.[0-9]{2})\b/g;
+        let match;
+        let highestAmount = 0;
+        while ((match = amountRegex.exec(text)) !== null) {
+            const val = parseFloat(match[1]);
+            if (val > highestAmount && val < 50000) {
+                highestAmount = val;
+            }
+        }
+
+        // Extract Date: YYYY-MM-DD or MM/DD/YYYY or DD-MM-YYYY
+        let detectedDate = "";
+        const dateRegex = /\b(202[0-9][-/.](?:0[1-9]|1[0-2])[-/.](?:0[1-9]|[12][0-9]|3[01]))\b/;
+        const dateMatch = text.match(dateRegex);
+        if (dateMatch) {
+            detectedDate = dateMatch[1].replace(/[/.]/g, "-");
+        } else {
+            detectedDate = new Date().toISOString().split("T")[0];
+        }
+
+        // Extract Merchant: usually first non-trivial line
+        const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 2 && !l.includes("RECEIPT") && !l.includes("INVOICE"));
+        const merchant = lines.length > 0 ? lines[0].slice(0, 35) : "Scanned Receipt Purchase";
+
+        ocrDetectedData = {
+            amount: highestAmount || 25.0,
+            date: detectedDate,
+            merchant: merchant
+        };
+
+        // Also copy scanned file to expense receipt input
+        const expenseFileInput = document.getElementById("expenseReceipt");
+        if (expenseFileInput) {
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            expenseFileInput.files = dataTransfer.files;
+            previewReceiptFile(expenseFileInput);
+        }
+
+        // Show Results Card
+        document.getElementById("ocrDetectedAmount").textContent = (window.CURRENCY_SYMBOL || "$") + ocrDetectedData.amount.toFixed(2);
+        document.getElementById("ocrDetectedDate").textContent = ocrDetectedData.date;
+        document.getElementById("ocrDetectedMerchant").textContent = ocrDetectedData.merchant;
+        document.getElementById("ocrResultsBox").classList.remove("hidden");
+
+    } catch (err) {
+        console.error("OCR Failure:", err);
+        statusText.textContent = "OCR scanning encountered an issue. You can still enter details manually.";
+        showToast("OCR scanning failed on this image", "error");
+    }
+}
+
+function applyOcrToExpense() {
+    closeReceiptScanner();
+    openAddExpenseModal();
+    if (ocrDetectedData.amount > 0) {
+        document.getElementById("expenseAmount").value = ocrDetectedData.amount.toFixed(2);
+    }
+    if (ocrDetectedData.date) {
+        document.getElementById("expenseDate").value = ocrDetectedData.date;
+    }
+    if (ocrDetectedData.merchant) {
+        document.getElementById("expenseDescription").value = ocrDetectedData.merchant;
+    }
+    showToast("Receipt details applied to expense form!");
+}
+
+// --- 3. Income CRUD (v2.0) ---
+function openAddIncomeModal() {
+    const modal = document.getElementById("incomeModal");
+    if (!modal) return;
+    document.getElementById("incomeForm").reset();
+    document.getElementById("incomeId").value = "";
+    document.getElementById("incomeDate").value = new Date().toISOString().split("T")[0];
+    document.getElementById("incomeModalTitle").textContent = "Log Income Stream";
+    document.getElementById("saveIncomeBtnText").textContent = "Save Income";
+    modal.classList.remove("hidden");
+    document.body.classList.add("overflow-hidden");
+}
+
+function closeIncomeModal() {
+    const modal = document.getElementById("incomeModal");
+    if (modal) modal.classList.add("hidden");
+    document.body.classList.remove("overflow-hidden");
+}
+
+async function handleIncomeSubmit(e) {
+    e.preventDefault();
+    const saveBtn = document.getElementById("saveIncomeBtn");
+    saveBtn.disabled = true;
+
+    const id = document.getElementById("incomeId").value;
+    const isEdit = Boolean(id);
+
+    const payload = {
+        amount: parseFloat(document.getElementById("incomeAmount").value),
+        source: document.getElementById("incomeSource").value.trim(),
+        account_id: document.getElementById("incomeAccount")?.value || null,
+        date: document.getElementById("incomeDate").value,
+        payment_method: document.getElementById("incomePaymentMethod").value,
+        notes: document.getElementById("incomeNotes").value.trim()
+    };
+
+    try {
+        const url = isEdit ? `/api/income/${id}` : "/api/income";
+        const method = isEdit ? "PUT" : "POST";
+
+        const res = await fetch(url, {
+            method: method,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message || (isEdit ? "Income updated!" : "Income logged!"));
+            closeIncomeModal();
+            setTimeout(() => window.location.reload(), 350);
+        } else {
+            showToast(data.error || "Failed to save income", "error");
+        }
+    } catch (err) {
+        showToast("Network error. Please try again.", "error");
+    } finally {
+        saveBtn.disabled = false;
+    }
+}
+
+async function editIncome(id) {
+    try {
+        const res = await fetch(`/api/income/${id}`);
+        const data = await res.json();
+        if (!data.success || !data.income) {
+            showToast("Failed to load income details", "error");
+            return;
+        }
+        const inc = data.income;
+        document.getElementById("incomeId").value = inc.id;
+        document.getElementById("incomeAmount").value = inc.amount;
+        document.getElementById("incomeSource").value = inc.source;
+        document.getElementById("incomeDate").value = inc.date;
+        document.getElementById("incomePaymentMethod").value = inc.payment_method;
+        if (inc.account_id) document.getElementById("incomeAccount").value = inc.account_id;
+        document.getElementById("incomeNotes").value = inc.notes || "";
+
+        document.getElementById("incomeModalTitle").textContent = "Edit Income Stream";
+        document.getElementById("saveIncomeBtnText").textContent = "Update Income";
+        document.getElementById("incomeModal").classList.remove("hidden");
+        document.body.classList.add("overflow-hidden");
+    } catch (err) {
+        showToast("Error retrieving income", "error");
+    }
+}
+
+async function deleteIncome(id) {
+    if (!confirm("Are you sure you want to delete this income record?")) return;
+    try {
+        const res = await fetch(`/api/income/${id}/delete`, { method: "POST" });
+        const data = await res.json();
+        if (data.success) {
+            showToast("Income deleted successfully!");
+            setTimeout(() => window.location.reload(), 350);
+        } else {
+            showToast(data.error || "Failed to delete income", "error");
+        }
+    } catch (err) {
+        showToast("Network error deleting income", "error");
+    }
+}
+
+// --- 4. Account Transfers (v2.0) ---
+function openTransferModal() {
+    const modal = document.getElementById("transferModal");
+    if (!modal) return;
+    document.getElementById("transferForm").reset();
+    document.getElementById("transferDate").value = new Date().toISOString().split("T")[0];
+    modal.classList.remove("hidden");
+    document.body.classList.add("overflow-hidden");
+}
+
+function closeTransferModal() {
+    const modal = document.getElementById("transferModal");
+    if (modal) modal.classList.add("hidden");
+    document.body.classList.remove("overflow-hidden");
+}
+
+async function handleTransferSubmit(e) {
+    e.preventDefault();
+    const fromId = document.getElementById("transferFromAccount").value;
+    const toId = document.getElementById("transferToAccount").value;
+    if (fromId === toId) {
+        showToast("Source and destination accounts must be different", "error");
+        return;
+    }
+
+    const payload = {
+        amount: parseFloat(document.getElementById("transferAmount").value),
+        from_account_id: parseInt(fromId),
+        to_account_id: parseInt(toId),
+        date: document.getElementById("transferDate").value,
+        notes: document.getElementById("transferNotes").value.trim()
+    };
+
+    try {
+        const res = await fetch("/api/transfer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message || "Transfer completed successfully!");
+            closeTransferModal();
+            setTimeout(() => window.location.reload(), 350);
+        } else {
+            showToast(data.error || "Transfer failed", "error");
+        }
+    } catch (err) {
+        showToast("Network error executing transfer", "error");
+    }
+}
+
+async function deleteTransferRecord(id) {
+    if (!confirm("Are you sure you want to delete this transfer? Account balances will re-adjust.")) return;
+    try {
+        const res = await fetch(`/api/transfer/${id}/delete`, { method: "POST" });
+        const data = await res.json();
+        if (data.success) {
+            showToast("Transfer deleted!");
+            setTimeout(() => window.location.reload(), 350);
+        } else {
+            showToast(data.error || "Failed to delete transfer", "error");
+        }
+    } catch (err) {
+        showToast("Network error", "error");
+    }
+}
+
+// --- 5. Subscriptions & Bills (v2.0) ---
+function openAddSubscriptionModal() {
+    const modal = document.getElementById("subscriptionModal");
+    if (!modal) return;
+    document.getElementById("subscriptionForm").reset();
+    document.getElementById("subscriptionId").value = "";
+    document.getElementById("subNextDueDate").value = new Date().toISOString().split("T")[0];
+    document.getElementById("subscriptionModalTitle").textContent = "Add Subscription";
+    document.getElementById("saveSubBtnText").textContent = "Save Subscription";
+    modal.classList.remove("hidden");
+    document.body.classList.add("overflow-hidden");
+}
+
+function closeSubscriptionModal() {
+    const modal = document.getElementById("subscriptionModal");
+    if (modal) modal.classList.add("hidden");
+    document.body.classList.remove("overflow-hidden");
+}
+
+async function handleSubscriptionSubmit(e) {
+    e.preventDefault();
+    const saveBtn = document.getElementById("saveSubBtn");
+    saveBtn.disabled = true;
+
+    const id = document.getElementById("subscriptionId").value;
+    const isEdit = Boolean(id);
+
+    const payload = {
+        name: document.getElementById("subName").value.trim(),
+        amount: parseFloat(document.getElementById("subAmount").value),
+        billing_cycle: document.getElementById("subCycle").value,
+        next_due_date: document.getElementById("subNextDueDate").value,
+        category_id: document.getElementById("subCategory")?.value || null,
+        account_id: document.getElementById("subAccount")?.value || null,
+        notes: document.getElementById("subNotes").value.trim()
+    };
+
+    try {
+        const url = isEdit ? `/api/subscription/${id}` : "/api/subscription";
+        const method = isEdit ? "PUT" : "POST";
+
+        const res = await fetch(url, {
+            method: method,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message || "Subscription saved!");
+            closeSubscriptionModal();
+            setTimeout(() => window.location.reload(), 350);
+        } else {
+            showToast(data.error || "Failed to save subscription", "error");
+        }
+    } catch (err) {
+        showToast("Network error saving subscription", "error");
+    } finally {
+        saveBtn.disabled = false;
+    }
+}
+
+async function editSubscription(id) {
+    try {
+        const res = await fetch(`/api/subscription/${id}`);
+        const data = await res.json();
+        if (!data.success || !data.subscription) return;
+        const sub = data.subscription;
+
+        document.getElementById("subscriptionId").value = sub.id;
+        document.getElementById("subName").value = sub.name;
+        document.getElementById("subAmount").value = sub.amount;
+        document.getElementById("subCycle").value = sub.billing_cycle || "Monthly";
+        document.getElementById("subNextDueDate").value = sub.next_due_date;
+        if (sub.category_id) document.getElementById("subCategory").value = sub.category_id;
+        if (sub.account_id) document.getElementById("subAccount").value = sub.account_id;
+        document.getElementById("subNotes").value = sub.notes || "";
+
+        document.getElementById("subscriptionModalTitle").textContent = "Edit Subscription";
+        document.getElementById("saveSubBtnText").textContent = "Update Subscription";
+        document.getElementById("subscriptionModal").classList.remove("hidden");
+        document.body.classList.add("overflow-hidden");
+    } catch (err) {
+        showToast("Error retrieving subscription", "error");
+    }
+}
+
+async function deleteSubscription(id) {
+    if (!confirm("Are you sure you want to delete this subscription?")) return;
+    try {
+        const res = await fetch(`/api/subscription/${id}/delete`, { method: "POST" });
+        const data = await res.json();
+        if (data.success) {
+            showToast("Subscription deleted!");
+            setTimeout(() => window.location.reload(), 350);
+        } else {
+            showToast(data.error || "Failed to delete subscription", "error");
+        }
+    } catch (err) {
+        showToast("Network error", "error");
+    }
+}
+
+async function paySubscriptionNow(id) {
+    try {
+        const res = await fetch(`/api/subscription/${id}/pay`, { method: "POST" });
+        const data = await res.json();
+        if (data.success) {
+            showToast("Bill recorded as expense & advanced!");
+            setTimeout(() => window.location.reload(), 400);
+        } else {
+            showToast(data.error || "Failed to process payment", "error");
+        }
+    } catch (err) {
+        showToast("Network error", "error");
+    }
+}
+
+// --- 6. Financial Goals & Savings Pockets (v2.0) ---
+function openAddGoalModal() {
+    const modal = document.getElementById("goalModal");
+    if (!modal) return;
+    document.getElementById("goalForm").reset();
+    document.getElementById("goalId").value = "";
+    document.getElementById("goalColor").value = "#10B981";
+    document.getElementById("goalColorLabel").textContent = "#10B981";
+    document.getElementById("goalModalTitle").textContent = "Create Financial Goal";
+    document.getElementById("saveGoalBtnText").textContent = "Save Goal";
+    modal.classList.remove("hidden");
+    document.body.classList.add("overflow-hidden");
+}
+
+function closeGoalModal() {
+    const modal = document.getElementById("goalModal");
+    if (modal) modal.classList.add("hidden");
+    document.body.classList.remove("overflow-hidden");
+}
+
+async function handleGoalSubmit(e) {
+    e.preventDefault();
+    const saveBtn = document.getElementById("saveGoalBtn");
+    saveBtn.disabled = true;
+
+    const id = document.getElementById("goalId").value;
+    const isEdit = Boolean(id);
+
+    const payload = {
+        name: document.getElementById("goalName").value.trim(),
+        target_amount: parseFloat(document.getElementById("goalTargetAmount").value),
+        current_amount: parseFloat(document.getElementById("goalCurrentAmount").value || 0),
+        target_date: document.getElementById("goalTargetDate").value || null,
+        account_id: document.getElementById("goalAccount")?.value || null,
+        color: document.getElementById("goalColor").value,
+        icon: document.getElementById("goalIcon").value,
+        notes: document.getElementById("goalNotes").value.trim()
+    };
+
+    try {
+        const url = isEdit ? `/api/goal/${id}` : "/api/goal";
+        const method = isEdit ? "PUT" : "POST";
+
+        const res = await fetch(url, {
+            method: method,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message || "Goal saved!");
+            closeGoalModal();
+            setTimeout(() => window.location.reload(), 350);
+        } else {
+            showToast(data.error || "Failed to save goal", "error");
+        }
+    } catch (err) {
+        showToast("Network error saving goal", "error");
+    } finally {
+        saveBtn.disabled = false;
+    }
+}
+
+async function editGoal(id) {
+    try {
+        const res = await fetch(`/api/goal/${id}`);
+        const data = await res.json();
+        if (!data.success || !data.goal) return;
+        const g = data.goal;
+
+        document.getElementById("goalId").value = g.id;
+        document.getElementById("goalName").value = g.name;
+        document.getElementById("goalTargetAmount").value = g.target_amount;
+        document.getElementById("goalCurrentAmount").value = g.current_amount;
+        if (g.target_date) document.getElementById("goalTargetDate").value = g.target_date;
+        if (g.account_id) document.getElementById("goalAccount").value = g.account_id;
+        document.getElementById("goalColor").value = g.color || "#10B981";
+        document.getElementById("goalColorLabel").textContent = g.color || "#10B981";
+        document.getElementById("goalIcon").value = g.icon || "bullseye";
+        document.getElementById("goalNotes").value = g.notes || "";
+
+        document.getElementById("goalModalTitle").textContent = "Edit Goal";
+        document.getElementById("saveGoalBtnText").textContent = "Update Goal";
+        document.getElementById("goalModal").classList.remove("hidden");
+        document.body.classList.add("overflow-hidden");
+    } catch (err) {
+        showToast("Error retrieving goal", "error");
+    }
+}
+
+async function deleteGoal(id) {
+    if (!confirm("Are you sure you want to delete this goal?")) return;
+    try {
+        const res = await fetch(`/api/goal/${id}/delete`, { method: "POST" });
+        const data = await res.json();
+        if (data.success) {
+            showToast("Goal deleted!");
+            setTimeout(() => window.location.reload(), 350);
+        } else {
+            showToast(data.error || "Failed to delete goal", "error");
+        }
+    } catch (err) {
+        showToast("Network error", "error");
+    }
+}
+
+function openContributeModal(id, name, remaining) {
+    const modal = document.getElementById("contributeModal");
+    if (!modal) return;
+    document.getElementById("contributeGoalId").value = id;
+    document.getElementById("contributeGoalNameHeader").textContent = name;
+    document.getElementById("contributeAmount").value = "";
+    document.getElementById("contributeAmount").placeholder = `e.g. ${remaining > 0 ? remaining.toFixed(2) : '50.00'}`;
+    modal.classList.remove("hidden");
+    document.body.classList.add("overflow-hidden");
+}
+
+function closeContributeModal() {
+    const modal = document.getElementById("contributeModal");
+    if (modal) modal.classList.add("hidden");
+    document.body.classList.remove("overflow-hidden");
+}
+
+async function handleContributeSubmit(e) {
+    e.preventDefault();
+    const id = document.getElementById("contributeGoalId").value;
+    const amount = parseFloat(document.getElementById("contributeAmount").value);
+    if (amount <= 0) {
+        showToast("Contribution must be greater than zero", "error");
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/goal/${id}/contribute`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ amount: amount })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast("Contribution recorded!");
+            closeContributeModal();
+            setTimeout(() => window.location.reload(), 350);
+        } else {
+            showToast(data.error || "Failed to contribute", "error");
+        }
+    } catch (err) {
+        showToast("Network error", "error");
+    }
+}
+
+// --- 7. Two-Factor Authentication Security (v2.0) ---
+let current2faSecret = "";
+
+function openTwoFactorModal() {
+    const modal = document.getElementById("twoFactorModal");
+    modal.classList.remove("hidden");
+    document.body.classList.add("overflow-hidden");
+    checkTwoFactorStatus();
+}
+
+function closeTwoFactorModal() {
+    const modal = document.getElementById("twoFactorModal");
+    modal.classList.add("hidden");
+    document.body.classList.remove("overflow-hidden");
+}
+
+async function checkTwoFactorStatus() {
+    const banner = document.getElementById("twoFactorStatusBanner");
+    const setupStep = document.getElementById("twoFactorSetupStep");
+    const disableStep = document.getElementById("twoFactorDisableStep");
+    const initStep = document.getElementById("twoFactorInitStep");
+
+    setupStep.classList.add("hidden");
+    disableStep.classList.add("hidden");
+    initStep.classList.add("hidden");
+
+    try {
+        const res = await fetch("/api/2fa/status");
+        const data = await res.json();
+        if (data.enabled) {
+            banner.className = "p-3 rounded-xl text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between";
+            banner.innerHTML = `<span class="flex items-center space-x-1.5"><i class="fa-solid fa-circle-check text-emerald-500"></i><span>Status: 2FA Active & Protecting Account</span></span>`;
+            disableStep.classList.remove("hidden");
+        } else {
+            banner.className = "p-3 rounded-xl text-xs font-semibold bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center justify-between";
+            banner.innerHTML = `<span class="flex items-center space-x-1.5"><i class="fa-solid fa-triangle-exclamation text-amber-500"></i><span>Status: 2FA Inactive (Recommended to Enable)</span></span>`;
+            initStep.classList.remove("hidden");
+        }
+    } catch (err) {
+        showToast("Failed to check 2FA status", "error");
+    }
+}
+
+async function startSetup2FA() {
+    document.getElementById("twoFactorInitStep").classList.add("hidden");
+    const setupStep = document.getElementById("twoFactorSetupStep");
+    setupStep.classList.remove("hidden");
+
+    try {
+        const res = await fetch("/api/2fa/setup", { method: "POST" });
+        const data = await res.json();
+        if (!data.success) {
+            showToast("Failed to initialize 2FA", "error");
+            return;
+        }
+
+        current2faSecret = data.secret;
+        document.getElementById("twoFactorSecretText").value = data.secret;
+
+        // Render QR Code using qrcode.js
+        const canvasContainer = document.getElementById("twoFactorQrCodeCanvas");
+        canvasContainer.innerHTML = "";
+        if (window.QRCode) {
+            new QRCode(canvasContainer, {
+                text: data.uri,
+                width: 170,
+                height: 170,
+                colorDark: "#0F172A",
+                colorLight: "#FFFFFF",
+                correctLevel: QRCode.CorrectLevel.M
+            });
+        }
+    } catch (err) {
+        showToast("Error generating 2FA credentials", "error");
+    }
+}
+
+function copyTwoFactorSecret() {
+    const text = document.getElementById("twoFactorSecretText").value;
+    navigator.clipboard.writeText(text).then(() => {
+        showToast("Secret key copied to clipboard!");
+    });
+}
+
+async function confirmEnable2FA() {
+    const code = document.getElementById("twoFactorVerifyInput").value.trim();
+    if (!code || code.length !== 6) {
+        showToast("Enter a valid 6-digit verification code", "error");
+        return;
+    }
+
+    try {
+        const res = await fetch("/api/2fa/verify-and-enable", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ secret: current2faSecret, code: code })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast("2FA successfully enabled!");
+            checkTwoFactorStatus();
+        } else {
+            showToast(data.error || "Verification failed. Check your authenticator app.", "error");
+        }
+    } catch (err) {
+        showToast("Network error verifying 2FA", "error");
+    }
+}
+
+async function disable2FA() {
+    if (!confirm("Are you sure you want to disable Two-Factor Authentication?")) return;
+    try {
+        const res = await fetch("/api/2fa/disable", { method: "POST" });
+        const data = await res.json();
+        if (data.success) {
+            showToast("Two-Factor Authentication disabled");
+            checkTwoFactorStatus();
+        } else {
+            showToast(data.error || "Failed to disable 2FA", "error");
+        }
+    } catch (err) {
+        showToast("Network error", "error");
+    }
+}
+

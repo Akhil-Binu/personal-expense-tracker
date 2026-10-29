@@ -164,16 +164,107 @@ def init_db(seed_sample_data=True):
         if "user_id" not in cat_columns:
             cursor.execute("ALTER TABLE categories ADD COLUMN user_id INTEGER DEFAULT 1")
 
+        cursor.execute("PRAGMA table_info(users)")
+        usr_columns = [col["name"] for col in cursor.fetchall()]
+        if "totp_secret" not in usr_columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN totp_secret TEXT")
+        if "two_factor_enabled" not in usr_columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER DEFAULT 0")
+
         cursor.execute("PRAGMA table_info(expenses)")
         exp_columns = [col["name"] for col in cursor.fetchall()]
         if "user_id" not in exp_columns:
             cursor.execute("ALTER TABLE expenses ADD COLUMN user_id INTEGER DEFAULT 1")
         if "account_id" not in exp_columns:
             cursor.execute("ALTER TABLE expenses ADD COLUMN account_id INTEGER REFERENCES bank_accounts(id) ON DELETE SET NULL")
+        if "receipt_filename" not in exp_columns:
+            cursor.execute("ALTER TABLE expenses ADD COLUMN receipt_filename TEXT")
+        if "is_recurring" not in exp_columns:
+            cursor.execute("ALTER TABLE expenses ADD COLUMN is_recurring INTEGER DEFAULT 0")
 
-        # Create index for bank accounts
+        # Income table (v2.0)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS income (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                source TEXT NOT NULL,
+                amount REAL NOT NULL CHECK(amount > 0),
+                payment_method TEXT NOT NULL,
+                account_id INTEGER REFERENCES bank_accounts(id) ON DELETE SET NULL,
+                notes TEXT,
+                user_id INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (account_id) REFERENCES bank_accounts (id) ON DELETE SET NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        """)
+
+        # Transfers table (v2.0)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS transfers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                from_account_id INTEGER NOT NULL,
+                to_account_id INTEGER NOT NULL,
+                amount REAL NOT NULL CHECK(amount > 0),
+                notes TEXT,
+                user_id INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (from_account_id) REFERENCES bank_accounts (id) ON DELETE CASCADE,
+                FOREIGN KEY (to_account_id) REFERENCES bank_accounts (id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        """)
+
+        # Subscriptions table (v2.0)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS subscriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                amount REAL NOT NULL CHECK(amount > 0),
+                category_id INTEGER,
+                account_id INTEGER,
+                billing_cycle TEXT NOT NULL DEFAULT 'Monthly',
+                billing_day INTEGER NOT NULL DEFAULT 1,
+                next_due_date TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                auto_log INTEGER NOT NULL DEFAULT 0,
+                notes TEXT,
+                user_id INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE SET NULL,
+                FOREIGN KEY (account_id) REFERENCES bank_accounts (id) ON DELETE SET NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        """)
+
+        # Goals table (v2.0)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS goals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                target_amount REAL NOT NULL CHECK(target_amount > 0),
+                current_amount REAL NOT NULL DEFAULT 0.0,
+                target_date TEXT,
+                color TEXT NOT NULL DEFAULT '#10B981',
+                icon TEXT NOT NULL DEFAULT 'bullseye',
+                account_id INTEGER,
+                notes TEXT,
+                user_id INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (account_id) REFERENCES bank_accounts (id) ON DELETE SET NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        """)
+
+        # Create index for bank accounts and v2 tables
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_account ON expenses(account_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_bank_accounts_user ON bank_accounts(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_income_user ON income(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_income_date ON income(date)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_transfers_user ON transfers(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_subscriptions_user ON subscriptions(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_goals_user ON goals(user_id)")
 
         # Seed default bank accounts for user 1 if none exist
         cursor.execute("SELECT COUNT(*) FROM bank_accounts WHERE user_id = 1")
@@ -212,8 +303,74 @@ def init_db(seed_sample_data=True):
         # Link any unlinked sample expenses to accounts for user 1
         cursor.execute("UPDATE expenses SET account_id = 1 WHERE account_id IS NULL AND payment_method IN ('Debit Card', 'Bank Transfer', 'Credit Card') AND user_id = 1")
         cursor.execute("UPDATE expenses SET account_id = 3 WHERE account_id IS NULL AND payment_method IN ('UPI / Digital Wallet') AND user_id = 1")
+
+        # Seed sample income if none exist
+        cursor.execute("SELECT COUNT(*) FROM income WHERE user_id = 1")
+        if cursor.fetchone()[0] == 0 and seed_sample_data:
+            _seed_sample_income(conn)
+
+        # Seed sample subscriptions if none exist
+        cursor.execute("SELECT COUNT(*) FROM subscriptions WHERE user_id = 1")
+        if cursor.fetchone()[0] == 0 and seed_sample_data:
+            _seed_sample_subscriptions(conn)
+
+        # Seed sample goals if none exist
+        cursor.execute("SELECT COUNT(*) FROM goals WHERE user_id = 1")
+        if cursor.fetchone()[0] == 0 and seed_sample_data:
+            _seed_sample_goals(conn)
             
         conn.commit()
+
+def _seed_sample_income(conn):
+    """Seeds realistic current and past month income streams."""
+    cursor = conn.cursor()
+    today = date.today()
+    first_of_month = today.replace(day=1).isoformat()
+    mid_month = (today.replace(day=1) + timedelta(days=14)).isoformat()
+    
+    # Previous month first day
+    prev_month_date = (today.replace(day=1) - timedelta(days=5)).replace(day=1).isoformat()
+    
+    sample_income = [
+        (first_of_month, "Tech Lead Monthly Salary", 5200.0, "Bank Transfer", 1, "Direct payroll deposit"),
+        (mid_month, "Freelance UI Consulting", 850.0, "UPI / Digital Wallet", 3, "Mobile web design deliverables"),
+        (prev_month_date, "Tech Lead Monthly Salary", 5200.0, "Bank Transfer", 1, "Direct payroll deposit"),
+    ]
+    for inc in sample_income:
+        cursor.execute("""
+            INSERT INTO income (date, source, amount, payment_method, account_id, notes, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, 1)
+        """, inc)
+
+def _seed_sample_subscriptions(conn):
+    """Seeds typical digital subscriptions and recurring bills."""
+    cursor = conn.cursor()
+    today = date.today()
+    sample_subs = [
+        ("Netflix Premium 4K", 19.99, 5, 1, "Monthly", 5, (today + timedelta(days=5)).isoformat(), "Family streaming plan", 0),
+        ("Spotify Music Family", 16.99, 5, 1, "Monthly", 12, (today + timedelta(days=12)).isoformat(), "HiFi audio streaming", 0),
+        ("Amazon Prime Annual", 14.99, 6, 1, "Monthly", 18, (today + timedelta(days=18)).isoformat(), "Prime shopping & shipping", 0),
+        ("Gym & Fitness Club", 49.00, 7, 1, "Monthly", 24, (today + timedelta(days=24)).isoformat(), "Monthly gym membership", 0),
+    ]
+    for sub in sample_subs:
+        cursor.execute("""
+            INSERT INTO subscriptions (name, amount, category_id, account_id, billing_cycle, billing_day, next_due_date, notes, auto_log, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        """, sub)
+
+def _seed_sample_goals(conn):
+    """Seeds financial milestones and savings pockets."""
+    cursor = conn.cursor()
+    sample_goals = [
+        ("Emergency Fund (6 Months)", 12000.0, 7500.0, "2027-06-30", "#10B981", "shield-halved", 2, "Essential living expenses safety cushion"),
+        ("Tokyo Vacation 2027", 3500.0, 1400.0, "2027-04-15", "#3B82F6", "plane", 2, "Flights, hotels and bullet train passes"),
+        ("New MacBook Pro Setup", 2200.0, 1100.0, "2027-01-31", "#8B5CF6", "laptop", 1, "M-series workstation replacement"),
+    ]
+    for g in sample_goals:
+        cursor.execute("""
+            INSERT INTO goals (name, target_amount, current_amount, target_date, color, icon, account_id, notes, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+        """, g)
 
 def _seed_sample_expenses(conn):
     """Populates realistic historical and current month expenses for instant demonstration."""
@@ -394,27 +551,37 @@ def get_bank_accounts(user_id=1):
     Returns all bank accounts for a user with:
       - initial_balance
       - total_spent (sum of expenses linked to this bank account)
-      - current_balance = initial_balance - total_spent
-      - expense_count
+      - total_income (sum of income deposited into this bank account)
+      - transfers_in / transfers_out
+      - current_balance = initial_balance + total_income - total_spent + (transfers_in - transfers_out)
+      - expense_count & income_count
     """
     user_id = user_id or 1
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT b.*,
-                   COALESCE(SUM(e.amount), 0) AS total_spent,
-                   COUNT(e.id) AS expense_count
+                   COALESCE((SELECT SUM(amount) FROM expenses WHERE account_id = b.id AND user_id = ?), 0) AS total_spent,
+                   COALESCE((SELECT COUNT(id) FROM expenses WHERE account_id = b.id AND user_id = ?), 0) AS expense_count,
+                   COALESCE((SELECT SUM(amount) FROM income WHERE account_id = b.id AND user_id = ?), 0) AS total_income,
+                   COALESCE((SELECT COUNT(id) FROM income WHERE account_id = b.id AND user_id = ?), 0) AS income_count,
+                   COALESCE((SELECT SUM(amount) FROM transfers WHERE to_account_id = b.id AND user_id = ?), 0) AS transfers_in,
+                   COALESCE((SELECT SUM(amount) FROM transfers WHERE from_account_id = b.id AND user_id = ?), 0) AS transfers_out
             FROM bank_accounts b
-            LEFT JOIN expenses e ON b.id = e.account_id AND e.user_id = ?
             WHERE b.user_id = ?
-            GROUP BY b.id
             ORDER BY b.id ASC
-        """, (user_id, user_id))
+        """, (user_id, user_id, user_id, user_id, user_id, user_id, user_id))
         accounts = [dict(r) for r in cursor.fetchall()]
         for a in accounts:
-            a["current_balance"] = round(a["initial_balance"] - a["total_spent"], 2)
             a["initial_balance"] = round(a["initial_balance"], 2)
             a["total_spent"] = round(a["total_spent"], 2)
+            a["total_income"] = round(a["total_income"], 2)
+            a["transfers_in"] = round(a["transfers_in"], 2)
+            a["transfers_out"] = round(a["transfers_out"], 2)
+            a["net_transfers"] = round(a["transfers_in"] - a["transfers_out"], 2)
+            a["current_balance"] = round(
+                a["initial_balance"] + a["total_income"] - a["total_spent"] + a["net_transfers"], 2
+            )
         return accounts
 
 def get_combined_balance(user_id=1):
@@ -423,13 +590,16 @@ def get_combined_balance(user_id=1):
     Returns:
       - total_initial_balance
       - total_spent
-      - total_current_balance (net combined balance)
+      - total_income
+      - total_current_balance (net combined balance across all accounts)
+      - net_savings = total_income - total_spent
       - account_count
       - breakdown_by_type
     """
     accounts = get_bank_accounts(user_id=user_id)
     total_initial = sum(a["initial_balance"] for a in accounts)
     total_spent = sum(a["total_spent"] for a in accounts)
+    total_income = sum(a["total_income"] for a in accounts)
     total_current = sum(a["current_balance"] for a in accounts)
     
     types_breakdown = {}
@@ -440,7 +610,9 @@ def get_combined_balance(user_id=1):
     return {
         "total_initial": round(total_initial, 2),
         "total_spent": round(total_spent, 2),
+        "total_income": round(total_income, 2),
         "total_current": round(total_current, 2),
+        "net_savings": round(total_income - total_spent, 2),
         "account_count": len(accounts),
         "types_breakdown": {k: round(v, 2) for k, v in types_breakdown.items()},
         "accounts": accounts
@@ -486,11 +658,11 @@ def delete_bank_account(account_id, user_id=1):
 
 def get_bank_account_by_id(account_id, user_id=1):
     user_id = user_id or 1
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM bank_accounts WHERE id = ? AND user_id = ?", (account_id, user_id))
-        row = cursor.fetchone()
-        return dict(row) if row else None
+    accounts = get_bank_accounts(user_id=user_id)
+    for a in accounts:
+        if a["id"] == account_id:
+            return a
+    return None
 
 # ==================== Category Operations ====================
 
@@ -645,32 +817,36 @@ def delete_category(cat_id, user_id=None):
 
 # ==================== Expense Operations ====================
 
-def add_expense(expense_date, category_id, amount, payment_method, description, notes="", user_id=1, account_id=None):
+def add_expense(expense_date, category_id, amount, payment_method, description, notes="", user_id=1, account_id=None, receipt_filename=None, is_recurring=0):
     user_id = user_id or 1
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO expenses (date, category_id, amount, payment_method, description, notes, user_id, account_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (expense_date, int(category_id), float(amount), payment_method.strip(), description.strip(), (notes or "").strip(), user_id, account_id))
+            INSERT INTO expenses (date, category_id, amount, payment_method, description, notes, user_id, account_id, receipt_filename, is_recurring)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (expense_date, int(category_id), float(amount), payment_method.strip(), description.strip(), (notes or "").strip(), user_id, account_id, receipt_filename, int(is_recurring or 0)))
         conn.commit()
         return cursor.lastrowid
 
-def update_expense(expense_id, expense_date, category_id, amount, payment_method, description, notes="", user_id=None, account_id=None):
+def update_expense(expense_id, expense_date, category_id, amount, payment_method, description, notes="", user_id=None, account_id=None, receipt_filename=None, is_recurring=None):
     with get_connection() as conn:
         cursor = conn.cursor()
+        fields = ["date = ?", "category_id = ?", "amount = ?", "payment_method = ?", "description = ?", "notes = ?", "account_id = ?"]
+        params = [expense_date, int(category_id), float(amount), payment_method.strip(), description.strip(), (notes or "").strip(), account_id]
+        if receipt_filename is not None:
+            fields.append("receipt_filename = ?")
+            params.append(receipt_filename)
+        if is_recurring is not None:
+            fields.append("is_recurring = ?")
+            params.append(int(is_recurring))
+        
+        where = "WHERE id = ?"
+        params.append(expense_id)
         if user_id:
-            cursor.execute("""
-                UPDATE expenses
-                SET date = ?, category_id = ?, amount = ?, payment_method = ?, description = ?, notes = ?, account_id = ?
-                WHERE id = ? AND user_id = ?
-            """, (expense_date, int(category_id), float(amount), payment_method.strip(), description.strip(), (notes or "").strip(), account_id, expense_id, user_id))
-        else:
-            cursor.execute("""
-                UPDATE expenses
-                SET date = ?, category_id = ?, amount = ?, payment_method = ?, description = ?, notes = ?, account_id = ?
-                WHERE id = ?
-            """, (expense_date, int(category_id), float(amount), payment_method.strip(), description.strip(), (notes or "").strip(), account_id, expense_id))
+            where += " AND user_id = ?"
+            params.append(user_id)
+            
+        cursor.execute(f"UPDATE expenses SET {', '.join(fields)} {where}", params)
         conn.commit()
         return cursor.rowcount > 0
 
@@ -973,3 +1149,480 @@ def get_available_months(user_id=1):
         if current not in months:
             months.insert(0, current)
         return months
+
+# ==================== Income & Cash Flow Operations (v2.0) ====================
+
+def add_income(date_str, source, amount, payment_method, account_id=None, notes="", user_id=1):
+    user_id = user_id or 1
+    clean_source = source.strip()
+    if not clean_source:
+        raise ValueError("Income source is required.")
+    amt = float(amount)
+    if amt <= 0:
+        raise ValueError("Income amount must be greater than zero.")
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO income (date, source, amount, payment_method, account_id, notes, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (date_str, clean_source, amt, payment_method.strip(), account_id, (notes or "").strip(), user_id))
+        conn.commit()
+        return cursor.lastrowid
+
+def get_income_list(user_id=1, start_date=None, end_date=None, limit=100, offset=0):
+    user_id = user_id or 1
+    conditions = ["i.user_id = ?"]
+    params = [user_id]
+    if start_date:
+        conditions.append("i.date >= ?")
+        params.append(start_date)
+    if end_date:
+        conditions.append("i.date <= ?")
+        params.append(end_date)
+    where = f"WHERE {' AND '.join(conditions)}"
+    
+    query = f"""
+        SELECT i.*, b.name as account_name, b.color as account_color, b.account_type as account_type
+        FROM income i
+        LEFT JOIN bank_accounts b ON i.account_id = b.id
+        {where}
+        ORDER BY i.date DESC, i.id DESC
+    """
+    if limit is not None:
+        query += " LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        return [dict(r) for r in cursor.fetchall()]
+
+def get_income(user_id=1, month_str=None, start_date=None, end_date=None, limit=100, offset=0):
+    """Convenience alias for get_income_list supporting month_str parameter."""
+    if month_str and not start_date and not end_date:
+        start_date = f"{month_str}-01"
+        end_date = f"{month_str}-31"
+    return get_income_list(user_id=user_id, start_date=start_date, end_date=end_date, limit=limit, offset=offset)
+
+def get_income_by_id(income_id, user_id=1):
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT i.*, b.name as account_name, b.color as account_color
+            FROM income i
+            LEFT JOIN bank_accounts b ON i.account_id = b.id
+            WHERE i.id = ? AND i.user_id = ?
+        """, (income_id, user_id))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def update_income(income_id, date_str, source, amount, payment_method, account_id=None, notes="", user_id=1):
+    user_id = user_id or 1
+    clean_source = source.strip()
+    if not clean_source:
+        raise ValueError("Income source is required.")
+    amt = float(amount)
+    if amt <= 0:
+        raise ValueError("Income amount must be greater than zero.")
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE income
+            SET date = ?, source = ?, amount = ?, payment_method = ?, account_id = ?, notes = ?
+            WHERE id = ? AND user_id = ?
+        """, (date_str, clean_source, amt, payment_method.strip(), account_id, (notes or "").strip(), income_id, user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def delete_income(income_id, user_id=1):
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM income WHERE id = ? AND user_id = ?", (income_id, user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def get_total_income(user_id=1, month_str=None):
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        if month_str:
+            cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM income WHERE user_id = ? AND strftime('%Y-%m', date) = ?", (user_id, month_str))
+        else:
+            cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM income WHERE user_id = ?", (user_id,))
+        return round(cursor.fetchone()[0], 2)
+
+# ==================== Account Transfer Operations (v2.0) ====================
+
+def add_transfer(date_str, from_account_id, to_account_id, amount, notes="", user_id=1):
+    user_id = user_id or 1
+    if int(from_account_id) == int(to_account_id):
+        raise ValueError("Cannot transfer funds to the exact same account.")
+    amt = float(amount)
+    if amt <= 0:
+        raise ValueError("Transfer amount must be greater than zero.")
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO transfers (date, from_account_id, to_account_id, amount, notes, user_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (date_str, int(from_account_id), int(to_account_id), amt, (notes or "").strip(), user_id))
+        conn.commit()
+        return cursor.lastrowid
+
+def get_transfers(user_id=1, limit=50, offset=0):
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT t.*,
+                   b1.name as from_account_name, b1.color as from_account_color,
+                   b2.name as to_account_name, b2.color as to_account_color
+            FROM transfers t
+            JOIN bank_accounts b1 ON t.from_account_id = b1.id
+            JOIN bank_accounts b2 ON t.to_account_id = b2.id
+            WHERE t.user_id = ?
+            ORDER BY t.date DESC, t.id DESC
+            LIMIT ? OFFSET ?
+        """, (user_id, limit, offset))
+        return [dict(r) for r in cursor.fetchall()]
+
+def delete_transfer(transfer_id, user_id=1):
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM transfers WHERE id = ? AND user_id = ?", (transfer_id, user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+# ==================== Cash Flow & Net Savings Calculation (v2.0) ====================
+
+def get_cash_flow_summary(user_id=1, month_str=None):
+    user_id = user_id or 1
+    if not month_str:
+        month_str = date.today().strftime("%Y-%m")
+        
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        
+        # Monthly income
+        cursor.execute("""
+            SELECT COALESCE(SUM(amount), 0) as total, COUNT(id) as count
+            FROM income
+            WHERE user_id = ? AND strftime('%Y-%m', date) = ?
+        """, (user_id, month_str))
+        inc_row = cursor.fetchone()
+        total_income = round(inc_row["total"], 2)
+        income_count = inc_row["count"]
+        
+        # Monthly expenses
+        cursor.execute("""
+            SELECT COALESCE(SUM(amount), 0) as total, COUNT(id) as count
+            FROM expenses
+            WHERE user_id = ? AND strftime('%Y-%m', date) = ?
+        """, (user_id, month_str))
+        exp_row = cursor.fetchone()
+        total_expenses = round(exp_row["total"], 2)
+        expense_count = exp_row["count"]
+        
+        net_cash_flow = round(total_income - total_expenses, 2)
+        savings_rate = round((net_cash_flow / total_income * 100), 1) if total_income > 0 else 0.0
+        
+        return {
+            "month": month_str,
+            "total_income": total_income,
+            "total_expenses": total_expenses,
+            "net_cash_flow": net_cash_flow,
+            "savings_rate": savings_rate,
+            "income_count": income_count,
+            "expense_count": expense_count,
+        }
+
+# ==================== Recurring Subscriptions & Bills Operations (v2.0) ====================
+
+def add_subscription(name, amount, category_id=None, account_id=None, billing_cycle='Monthly', billing_day=1, next_due_date=None, notes="", auto_log=0, user_id=1):
+    user_id = user_id or 1
+    clean_name = name.strip()
+    if not clean_name:
+        raise ValueError("Subscription name is required.")
+    amt = float(amount)
+    if amt <= 0:
+        raise ValueError("Subscription amount must be positive.")
+    if not next_due_date:
+        next_due_date = date.today().isoformat()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO subscriptions (name, amount, category_id, account_id, billing_cycle, billing_day, next_due_date, notes, auto_log, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (clean_name, amt, category_id, account_id, billing_cycle, int(billing_day or 1), next_due_date, (notes or "").strip(), int(auto_log or 0), user_id))
+        conn.commit()
+        return cursor.lastrowid
+
+def get_subscriptions(user_id=1, active_only=False):
+    user_id = user_id or 1
+    conditions = ["s.user_id = ?"]
+    params = [user_id]
+    if active_only:
+        conditions.append("s.is_active = 1")
+    where = f"WHERE {' AND '.join(conditions)}"
+    
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(f"""
+            SELECT s.*,
+                   c.name as category_name, c.color as category_color, c.icon as category_icon,
+                   b.name as account_name, b.color as account_color
+            FROM subscriptions s
+            LEFT JOIN categories c ON s.category_id = c.id
+            LEFT JOIN bank_accounts b ON s.account_id = b.id
+            {where}
+            ORDER BY s.next_due_date ASC, s.name ASC
+        """, params)
+        rows = [dict(r) for r in cursor.fetchall()]
+        today = date.today()
+        for r in rows:
+            try:
+                due_dt = datetime.strptime(r["next_due_date"], "%Y-%m-%d").date()
+                r["days_until_due"] = (due_dt - today).days
+            except Exception:
+                r["days_until_due"] = 0
+        return rows
+
+def get_subscription_by_id(sub_id, user_id=1):
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT s.*,
+                   c.name as category_name, c.color as category_color,
+                   b.name as account_name, b.color as account_color
+            FROM subscriptions s
+            LEFT JOIN categories c ON s.category_id = c.id
+            LEFT JOIN bank_accounts b ON s.account_id = b.id
+            WHERE s.id = ? AND s.user_id = ?
+        """, (sub_id, user_id))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def update_subscription(sub_id, name, amount, category_id=None, account_id=None, billing_cycle='Monthly', billing_day=1, next_due_date=None, is_active=1, notes="", auto_log=0, user_id=1):
+    user_id = user_id or 1
+    clean_name = name.strip()
+    if not clean_name:
+        raise ValueError("Subscription name is required.")
+    amt = float(amount)
+    if amt <= 0:
+        raise ValueError("Subscription amount must be positive.")
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE subscriptions
+            SET name = ?, amount = ?, category_id = ?, account_id = ?, billing_cycle = ?, billing_day = ?, next_due_date = ?, is_active = ?, notes = ?, auto_log = ?
+            WHERE id = ? AND user_id = ?
+        """, (clean_name, amt, category_id, account_id, billing_cycle, int(billing_day or 1), next_due_date, int(is_active), (notes or "").strip(), int(auto_log or 0), sub_id, user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def delete_subscription(sub_id, user_id=1):
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM subscriptions WHERE id = ? AND user_id = ?", (sub_id, user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def mark_subscription_paid(sub_id, user_id=1):
+    """
+    Logs an expense record for the subscription and advances its next_due_date.
+    """
+    sub = get_subscription_by_id(sub_id, user_id=user_id)
+    if not sub:
+        raise ValueError("Subscription not found.")
+        
+    today = date.today().isoformat()
+    # Log expense
+    cat_id = sub["category_id"] or 1
+    add_expense(
+        expense_date=today,
+        category_id=cat_id,
+        amount=sub["amount"],
+        payment_method="Bank Transfer",
+        description=f"Subscription: {sub['name']}",
+        notes=f"Auto-logged subscription payment for {sub['name']}",
+        user_id=user_id,
+        account_id=sub["account_id"],
+        is_recurring=1
+    )
+    
+    # Calculate next due date
+    try:
+        current_due = datetime.strptime(sub["next_due_date"], "%Y-%m-%d").date()
+    except Exception:
+        current_due = date.today()
+        
+    cycle = sub.get("billing_cycle", "Monthly").capitalize()
+    if cycle == "Weekly":
+        next_dt = current_due + timedelta(days=7)
+    elif cycle == "Yearly":
+        try:
+            next_dt = current_due.replace(year=current_due.year + 1)
+        except ValueError:
+            next_dt = current_due + timedelta(days=365)
+    elif cycle == "Quarterly":
+        next_dt = current_due + timedelta(days=91)
+    else:  # Monthly default
+        # Add ~1 month safely
+        next_month = current_due.month + 1
+        year = current_due.year
+        if next_month > 12:
+            next_month = 1
+            year += 1
+        day = min(sub.get("billing_day", 1), 28)
+        next_dt = date(year, next_month, day)
+        
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE subscriptions SET next_due_date = ? WHERE id = ? AND user_id = ?", (next_dt.isoformat(), sub_id, user_id))
+        conn.commit()
+    return next_dt.isoformat()
+
+def get_upcoming_subscriptions(user_id=1, days=30):
+    subs = get_subscriptions(user_id=user_id, active_only=True)
+    return [s for s in subs if 0 <= s.get("days_until_due", 999) <= days]
+
+# ==================== Financial Goals & Savings Pockets Operations (v2.0) ====================
+
+def add_goal(name, target_amount, current_amount=0.0, target_date=None, color='#10B981', icon='bullseye', account_id=None, notes="", user_id=1):
+    user_id = user_id or 1
+    clean_name = name.strip()
+    if not clean_name:
+        raise ValueError("Goal name is required.")
+    target = float(target_amount)
+    if target <= 0:
+        raise ValueError("Goal target amount must be positive.")
+    current = max(0.0, float(current_amount or 0.0))
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO goals (name, target_amount, current_amount, target_date, color, icon, account_id, notes, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (clean_name, target, current, target_date, color.strip(), icon.strip(), account_id, (notes or "").strip(), user_id))
+        conn.commit()
+        return cursor.lastrowid
+
+def get_goals(user_id=1):
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT g.*, b.name as account_name, b.color as account_color
+            FROM goals g
+            LEFT JOIN bank_accounts b ON g.account_id = b.id
+            WHERE g.user_id = ?
+            ORDER BY g.target_date ASC, g.id ASC
+        """, (user_id,))
+        rows = [dict(r) for r in cursor.fetchall()]
+        today = date.today()
+        for r in rows:
+            target = r["target_amount"]
+            current = r["current_amount"]
+            r["remaining_amount"] = round(max(0.0, target - current), 2)
+            r["progress_percentage"] = round(min(100.0, (current / target * 100)), 1) if target > 0 else 0.0
+            r["is_completed"] = 1 if current >= target else 0
+            if r.get("target_date"):
+                try:
+                    tgt_dt = datetime.strptime(r["target_date"], "%Y-%m-%d").date()
+                    days = (tgt_dt - today).days
+                    r["days_remaining"] = max(0, days)
+                    months_left = max(1, round(days / 30))
+                    r["suggested_monthly_savings"] = round(r["remaining_amount"] / months_left, 2)
+                except Exception:
+                    r["days_remaining"] = None
+                    r["suggested_monthly_savings"] = None
+            else:
+                r["days_remaining"] = None
+                r["suggested_monthly_savings"] = None
+        return rows
+
+def get_goal_by_id(goal_id, user_id=1):
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT g.*, b.name as account_name, b.color as account_color
+            FROM goals g
+            LEFT JOIN bank_accounts b ON g.account_id = b.id
+            WHERE g.id = ? AND g.user_id = ?
+        """, (goal_id, user_id))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        r = dict(row)
+        target = r["target_amount"]
+        current = r["current_amount"]
+        r["remaining_amount"] = round(max(0.0, target - current), 2)
+        r["progress_percentage"] = round(min(100.0, (current / target * 100)), 1) if target > 0 else 0.0
+        return r
+
+def update_goal(goal_id, name, target_amount, current_amount, target_date=None, color='#10B981', icon='bullseye', account_id=None, notes="", user_id=1):
+    user_id = user_id or 1
+    clean_name = name.strip()
+    if not clean_name:
+        raise ValueError("Goal name is required.")
+    target = float(target_amount)
+    if target <= 0:
+        raise ValueError("Goal target amount must be positive.")
+    current = max(0.0, float(current_amount or 0.0))
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE goals
+            SET name = ?, target_amount = ?, current_amount = ?, target_date = ?, color = ?, icon = ?, account_id = ?, notes = ?
+            WHERE id = ? AND user_id = ?
+        """, (clean_name, target, current, target_date, color.strip(), icon.strip(), account_id, (notes or "").strip(), goal_id, user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def contribute_to_goal(goal_id, amount, from_account_id=None, user_id=1):
+    user_id = user_id or 1
+    amt = float(amount)
+    if amt <= 0:
+        raise ValueError("Contribution amount must be positive.")
+    goal = get_goal_by_id(goal_id, user_id=user_id)
+    if not goal:
+        raise ValueError("Goal not found.")
+    new_amount = round(goal["current_amount"] + amt, 2)
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE goals SET current_amount = ? WHERE id = ? AND user_id = ?", (new_amount, goal_id, user_id))
+        conn.commit()
+    return new_amount
+
+def delete_goal(goal_id, user_id=1):
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM goals WHERE id = ? AND user_id = ?", (goal_id, user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+# ==================== Two-Factor Authentication Security (v2.0) ====================
+
+def update_user_2fa(user_id, enabled, secret=None):
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        if enabled:
+            cursor.execute("UPDATE users SET two_factor_enabled = 1, totp_secret = ? WHERE id = ?", (secret, user_id))
+        else:
+            cursor.execute("UPDATE users SET two_factor_enabled = 0, totp_secret = NULL WHERE id = ?", (user_id,))
+        conn.commit()
+        return True
+
+def get_user_2fa_info(user_id):
+    user_id = user_id or 1
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT two_factor_enabled, totp_secret, username, email FROM users WHERE id = ?", (user_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None

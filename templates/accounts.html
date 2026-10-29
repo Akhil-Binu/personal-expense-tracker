@@ -17,6 +17,10 @@
             </p>
         </div>
         <div class="flex items-center space-x-2.5">
+            <button onclick="openTransferModal()" class="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 shadow-sm transition-all">
+                <i class="fa-solid fa-arrow-right-arrow-left text-xs text-teal-600"></i>
+                <span>Transfer Money</span>
+            </button>
             <button onclick="openAddAccountModal()" class="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white shadow-md shadow-teal-600/20 active:scale-[0.98] transition-all">
                 <i class="fa-solid fa-plus text-xs"></i>
                 <span>Add Bank Account</span>
@@ -209,6 +213,66 @@
                 <i class="fa-solid fa-plus text-xs"></i>
                 <span>Add Your First Bank Account</span>
             </button>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ==================== RECENT ACCOUNT TRANSFERS (v2.0) ==================== -->
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+                <i class="fa-solid fa-arrow-right-arrow-left text-teal-600"></i>
+                <span>Recent Account Transfers</span>
+            </h3>
+            <button onclick="openTransferModal()" class="text-xs font-bold text-teal-600 dark:text-teal-400 hover:underline">
+                + New Transfer
+            </button>
+        </div>
+
+        {% if transfers %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50 dark:bg-slate-800/50 text-[10px] uppercase font-bold text-slate-400">
+                    <tr>
+                        <th class="py-3 px-6">Date</th>
+                        <th class="py-3 px-6">From Account</th>
+                        <th class="py-3 px-6">To Account</th>
+                        <th class="py-3 px-6">Notes</th>
+                        <th class="py-3 px-6 text-right">Amount</th>
+                        <th class="py-3 px-6 text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                    {% for t in transfers %}
+                    <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                        <td class="py-3 px-6 font-mono text-slate-500">{{ t.date }}</td>
+                        <td class="py-3 px-6 font-semibold text-slate-800 dark:text-slate-200">
+                            <span class="inline-flex items-center space-x-1.5">
+                                <span class="w-2 h-2 rounded-full" style="background-color: {{ t.from_account_color }};"></span>
+                                <span>{{ t.from_account_name }}</span>
+                            </span>
+                        </td>
+                        <td class="py-3 px-6 font-semibold text-slate-800 dark:text-slate-200">
+                            <span class="inline-flex items-center space-x-1.5">
+                                <span class="w-2 h-2 rounded-full" style="background-color: {{ t.to_account_color }};"></span>
+                                <span>{{ t.to_account_name }}</span>
+                            </span>
+                        </td>
+                        <td class="py-3 px-6 text-slate-400">{{ t.notes or "-" }}</td>
+                        <td class="py-3 px-6 text-right font-black text-slate-900 dark:text-white">{{ currency.symbol }}{{ "{:,.2f}".format(t.amount) }}</td>
+                        <td class="py-3 px-6 text-center">
+                            <button onclick="deleteTransferRecord({{ t.id }})" class="p-1 rounded text-slate-400 hover:text-rose-600 transition-colors" title="Delete Transfer">
+                                <i class="fa-solid fa-trash-can text-xs"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-6 text-center text-xs text-slate-400">
+            No inter-account transfers executed yet. Click "+ New Transfer" to move funds between checking, savings, or digital wallets.
         </div>
         {% endif %}
     </div>

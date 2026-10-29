@@ -6,36 +6,90 @@
 {% block content %}
 <div class="space-y-6">
 
-    <!-- ==================== COMBINED BANK BALANCE BANNER ==================== -->
-    <div class="relative overflow-hidden bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-lg border border-teal-800/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div class="absolute -right-12 -top-12 w-48 h-48 bg-teal-500/15 rounded-full blur-2xl pointer-events-none"></div>
-        <div class="flex items-center space-x-3.5 relative z-10">
-            <div class="w-12 h-12 rounded-2xl bg-teal-500/20 text-teal-400 border border-teal-400/30 flex items-center justify-center text-lg flex-shrink-0">
-                <i class="fa-solid fa-building-columns"></i>
-            </div>
-            <div>
-                <div class="flex items-center space-x-2">
-                    <span class="text-xs font-semibold uppercase tracking-wider text-teal-400">Combined Bank Net Balance</span>
-                    <span class="text-[10px] font-bold bg-teal-900/80 text-teal-300 px-2 py-0.5 rounded-full border border-teal-700/60">
-                        {{ combined_bank_balance.account_count }} Linked Account{% if combined_bank_balance.account_count != 1 %}s{% endif %}
-                    </span>
+    <!-- ==================== COMBINED BANK BALANCE & CASH FLOW BANNER (v2.0) ==================== -->
+    <div class="relative overflow-hidden bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 text-white rounded-3xl p-5 sm:p-6 shadow-xl border border-teal-800/40">
+        <div class="absolute -right-12 -top-12 w-64 h-64 bg-teal-500/15 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute -left-12 -bottom-12 w-64 h-64 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none"></div>
+        
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 relative z-10">
+            <!-- Left: Net Balance -->
+            <div class="flex items-center space-x-4">
+                <div class="w-14 h-14 rounded-2xl bg-teal-500/20 text-teal-400 border border-teal-400/30 flex items-center justify-center text-2xl flex-shrink-0 shadow-inner">
+                    <i class="fa-solid fa-vault"></i>
                 </div>
-                <div class="text-2xl sm:text-3xl font-black tracking-tight text-white mt-0.5">
-                    {{ currency.symbol }}{{ "{:,.2f}".format(combined_bank_balance.total_current) }}
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <span class="text-xs font-bold uppercase tracking-wider text-teal-400">Total Net Portfolio Balance</span>
+                        <span class="text-[10px] font-bold bg-teal-900/80 text-teal-300 px-2.5 py-0.5 rounded-full border border-teal-700/60">
+                            {{ combined_bank_balance.account_count }} Accounts Linked
+                        </span>
+                    </div>
+                    <div class="text-3xl sm:text-4xl font-black tracking-tight text-white mt-1">
+                        {{ currency.symbol }}{{ "{:,.2f}".format(combined_bank_balance.total_current) }}
+                    </div>
                 </div>
             </div>
-        </div>
-        <div class="flex items-center justify-between sm:justify-end space-x-4 text-xs relative z-10">
-            <div class="text-left sm:text-right">
-                <p class="text-slate-400 text-[11px]">Total Initial: <span class="font-semibold text-slate-200">{{ currency.symbol }}{{ "{:,.2f}".format(combined_bank_balance.total_initial) }}</span></p>
-                <p class="text-slate-400 text-[11px]">Deducted: <span class="font-semibold text-rose-300">-{{ currency.symbol }}{{ "{:,.2f}".format(combined_bank_balance.total_spent) }}</span></p>
+
+            <!-- Middle: Monthly Inflow vs Outflow Mini-Pill -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-white/5 backdrop-blur-md rounded-2xl p-3 border border-white/10 text-xs">
+                <div>
+                    <span class="text-[10px] font-bold uppercase text-slate-400 block">Monthly Inflow</span>
+                    <span class="font-extrabold text-emerald-400 text-sm">+{{ currency.symbol }}{{ "{:,.2f}".format(cash_flow.total_income) }}</span>
+                </div>
+                <div>
+                    <span class="text-[10px] font-bold uppercase text-slate-400 block">Monthly Outflow</span>
+                    <span class="font-extrabold text-rose-400 text-sm">-{{ currency.symbol }}{{ "{:,.2f}".format(cash_flow.total_expenses) }}</span>
+                </div>
+                <div class="col-span-2 sm:col-span-1">
+                    <span class="text-[10px] font-bold uppercase text-slate-400 block">Savings Rate</span>
+                    <span class="font-extrabold text-teal-300 text-sm">{{ cash_flow.savings_rate }}%</span>
+                </div>
             </div>
-            <a href="{{ url_for('accounts_page') }}" class="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-teal-600 hover:bg-teal-500 text-white transition-all shadow-md active:scale-95">
-                <span>Manage Accounts</span>
-                <i class="fa-solid fa-arrow-right text-[10px]"></i>
-            </a>
+
+            <!-- Right: Action Shortcuts -->
+            <div class="flex items-center space-x-2 flex-wrap">
+                <button onclick="openAddIncomeModal()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-md active:scale-95 flex items-center space-x-1.5">
+                    <i class="fa-solid fa-circle-arrow-down text-xs"></i>
+                    <span>+ Income</span>
+                </button>
+                <button onclick="openAddExpenseModal()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white transition-all shadow-md active:scale-95 flex items-center space-x-1.5">
+                    <i class="fa-solid fa-plus text-xs"></i>
+                    <span>+ Expense</span>
+                </button>
+                <button onclick="openTransferModal()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all active:scale-95 flex items-center space-x-1.5">
+                    <i class="fa-solid fa-arrow-right-arrow-left text-xs"></i>
+                    <span>Transfer</span>
+                </button>
+            </div>
         </div>
     </div>
+
+    <!-- ==================== AI SPENDING INSIGHTS ENGINE (v2.0) ==================== -->
+    {% if smart_insights %}
+    <div class="space-y-2.5">
+        <div class="flex items-center justify-between px-1">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center space-x-1.5">
+                <i class="fa-solid fa-wand-magic-sparkles text-teal-500"></i>
+                <span>Smart Financial Insights</span>
+            </span>
+            <span class="text-[11px] text-slate-400 font-medium">Real-time spend velocity & patterns</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {% for ins in smart_insights[:3] %}
+            <div class="rounded-2xl p-4 border transition-all shadow-sm {% if ins.type == 'danger' %}bg-rose-50/80 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/50 text-rose-900 dark:text-rose-200{% elif ins.type == 'warning' %}bg-amber-50/80 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/50 text-amber-900 dark:text-amber-200{% elif ins.type == 'success' %}bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/50 text-emerald-900 dark:text-emerald-200{% else %}bg-teal-50/80 dark:bg-teal-950/30 border-teal-200 dark:border-teal-900/50 text-teal-900 dark:text-teal-200{% endif %}">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full {% if ins.type == 'danger' %}bg-rose-200/80 dark:bg-rose-900 text-rose-800 dark:text-rose-200{% elif ins.type == 'warning' %}bg-amber-200/80 dark:bg-amber-900 text-amber-800 dark:text-amber-200{% elif ins.type == 'success' %}bg-emerald-200/80 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200{% else %}bg-teal-200/80 dark:bg-teal-900 text-teal-800 dark:text-teal-200{% endif %}">
+                        {{ ins.badge }}
+                    </span>
+                    <i class="fa-solid fa-{{ ins.icon }} text-sm opacity-80"></i>
+                </div>
+                <h4 class="font-bold text-xs mb-1">{{ ins.title }}</h4>
+                <p class="text-xs opacity-90 leading-relaxed">{{ ins.message }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 
     <!-- ==================== TOP KPI CARDS ==================== -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
@@ -165,6 +219,91 @@
             <div class="relative flex-1 min-h-[240px] flex items-center justify-center">
                 <canvas id="categoryDonutChart"></canvas>
             </div>
+        </div>
+    </div>
+
+    <!-- ==================== UPCOMING BILLS & SAVINGS GOALS ROW (v2.0) ==================== -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Upcoming Subscriptions Widget -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center space-x-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-sm">
+                        <i class="fa-solid fa-repeat"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-sm text-slate-800 dark:text-slate-100">Upcoming Bills & Subscriptions</h3>
+                        <p class="text-[11px] text-slate-400">Due within next 14 days</p>
+                    </div>
+                </div>
+                <a href="{{ url_for('subscriptions_page') }}" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">View All &rarr;</a>
+            </div>
+
+            {% if upcoming_subs %}
+            <div class="space-y-2.5 divide-y divide-slate-100 dark:divide-slate-800/80">
+                {% for sub in upcoming_subs[:3] %}
+                <div class="pt-2 flex items-center justify-between">
+                    <div class="flex items-center space-x-2.5 min-w-0">
+                        <span class="w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0"></span>
+                        <div class="min-w-0">
+                            <p class="font-bold text-xs text-slate-800 dark:text-slate-200 truncate">{{ sub.name }}</p>
+                            <p class="text-[10px] text-slate-400">Due: {{ sub.next_due_date }} (in {{ sub.days_until_due }}d)</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="font-bold text-xs text-slate-900 dark:text-white">{{ currency.symbol }}{{ "{:,.2f}".format(sub.amount) }}</span>
+                        <button onclick="paySubscriptionNow({{ sub.id }})" class="p-1 px-2 text-[10px] font-bold rounded-lg bg-teal-50 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400 hover:bg-teal-100 transition-colors" title="Mark Paid">Pay</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="py-6 text-center text-slate-400 text-xs">
+                <i class="fa-solid fa-calendar-check text-2xl mb-1 text-slate-300 dark:text-slate-600 block"></i>
+                No subscriptions due in the next 14 days.
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Active Goals Widget -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center space-x-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center text-sm">
+                        <i class="fa-solid fa-bullseye"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-sm text-slate-800 dark:text-slate-100">Savings Goals in Progress</h3>
+                        <p class="text-[11px] text-slate-400">Target capital tracking</p>
+                    </div>
+                </div>
+                <a href="{{ url_for('goals_page') }}" class="text-xs font-semibold text-teal-600 dark:text-teal-400 hover:underline">View All &rarr;</a>
+            </div>
+
+            {% if active_goals %}
+            <div class="space-y-3">
+                {% for g in active_goals[:2] %}
+                <div class="space-y-1">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="font-bold text-slate-800 dark:text-slate-200">{{ g.name }}</span>
+                        <span class="font-extrabold text-slate-900 dark:text-white">{{ currency.symbol }}{{ "{:,.2f}".format(g.current_amount) }} / {{ currency.symbol }}{{ "{:,.2f}".format(g.target_amount) }}</span>
+                    </div>
+                    <div class="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                        <div class="h-full rounded-full transition-all duration-500" style="width: {{ g.progress_percentage }}%; background-color: {{ g.color or '#10B981' }};"></div>
+                    </div>
+                    <div class="flex justify-between text-[10px] text-slate-400">
+                        <span>{{ g.progress_percentage }}% funded</span>
+                        <span>Rem: {{ currency.symbol }}{{ "{:,.2f}".format(g.remaining_amount) }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="py-6 text-center text-slate-400 text-xs">
+                <i class="fa-solid fa-piggy-bank text-2xl mb-1 text-slate-300 dark:text-slate-600 block"></i>
+                No active savings goals yet.
+            </div>
+            {% endif %}
         </div>
     </div>
 

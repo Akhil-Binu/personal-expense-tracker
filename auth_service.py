@@ -55,3 +55,58 @@ def hash_password(password):
 
 def verify_password(stored_hash, candidate_password):
     return check_password_hash(stored_hash, candidate_password)
+
+import base64
+import hashlib
+import hmac
+import struct
+import time
+import urllib.parse
+
+def generate_totp_secret():
+    """Generates a random 160-bit Base32 secret for TOTP (Google Authenticator compatible)."""
+    random_bytes = secrets.token_bytes(20)
+    return base64.b32encode(random_bytes).decode("utf-8").replace("=", "")
+
+def get_totp_uri(secret, username, issuer="FinanceFlow"):
+    """Returns an otpauth:// URI for scanning into authenticator apps."""
+    account_label = urllib.parse.quote(f"{issuer}:{username}")
+    issuer_param = urllib.parse.quote(issuer)
+    return f"otpauth://totp/{account_label}?secret={secret}&issuer={issuer_param}&algorithm=SHA1&digits=6&period=30"
+
+def generate_totp_code(secret, t=None, time_step=30):
+    """Generates the 6-digit TOTP code for the given secret at timestamp t (RFC 6238)."""
+    if t is None:
+        t = time.time()
+    counter = int(t // time_step)
+    
+    # Pad secret if padding was stripped
+    padding = '=' * ((8 - len(secret) % 8) % 8)
+    key = base64.b32decode((secret + padding).upper())
+    
+    msg = struct.pack(">Q", counter)
+    h = hmac.new(key, msg, hashlib.sha1).digest()
+    
+    offset = h[-1] & 0x0F
+    binary = struct.unpack(">I", h[offset:offset + 4])[0] & 0x7FFFFFFF
+    code = binary % 1000000
+    return f"{code:06d}"
+
+def verify_totp_code(secret, candidate_code, window=1, time_step=30):
+    """
+    Verifies candidate 6-digit TOTP code against current and neighboring time steps.
+    Window=1 checks current interval, previous 30s, and next 30s for clock skew.
+    """
+    if not secret or not candidate_code:
+        return False
+    
+    candidate = str(candidate_code).strip()
+    if len(candidate) != 6 or not candidate.isdigit():
+        return False
+    
+    current_time = time.time()
+    for w in range(-window, window + 1):
+        t = current_time + (w * time_step)
+        if generate_totp_code(secret, t, time_step) == candidate:
+            return True
+    return False

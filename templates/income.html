@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}Income & Cash Flow{% endblock %}
+{% block header_title %}Income & Cash Flow{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Top Metric Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Total Income Card -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Total Income</span>
+                <div class="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-sm">
+                    <i class="fa-solid fa-money-bill-trend-up"></i>
+                </div>
+            </div>
+            <p class="text-2xl font-black text-slate-900 dark:text-white">
+                {{ currency.symbol }}{{ "{:,.2f}".format(total_income) }}
+            </p>
+            <span class="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mt-1 inline-block">
+                {{ incomes|length }} logged stream{% if incomes|length != 1 %}s{% endif %}
+            </span>
+        </div>
+
+        <!-- Monthly Outlays Card -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Monthly Expenses</span>
+                <div class="w-8 h-8 rounded-xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center text-sm">
+                    <i class="fa-solid fa-receipt"></i>
+                </div>
+            </div>
+            <p class="text-2xl font-black text-slate-900 dark:text-white">
+                {{ currency.symbol }}{{ "{:,.2f}".format(cash_flow.total_expenses) }}
+            </p>
+            <span class="text-[11px] font-semibold text-slate-400 mt-1 inline-block">
+                {{ cash_flow.expense_count }} expenses recorded
+            </span>
+        </div>
+
+        <!-- Net Cash Flow Card -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Net Cash Flow</span>
+                <div class="w-8 h-8 rounded-xl {% if cash_flow.net_cash_flow >= 0 %}bg-teal-100 dark:bg-teal-950/60 text-teal-600{% else %}bg-rose-100 dark:bg-rose-950/60 text-rose-600{% endif %} flex items-center justify-center text-sm">
+                    <i class="fa-solid fa-scale-balanced"></i>
+                </div>
+            </div>
+            <p class="text-2xl font-black {% if cash_flow.net_cash_flow >= 0 %}text-teal-600 dark:text-teal-400{% else %}text-rose-600 dark:text-rose-400{% endif %}">
+                {% if cash_flow.net_cash_flow >= 0 %}+{% endif %}{{ currency.symbol }}{{ "{:,.2f}".format(cash_flow.net_cash_flow) }}
+            </p>
+            <span class="text-[11px] font-semibold text-slate-400 mt-1 inline-block">
+                Income minus expenses
+            </span>
+        </div>
+
+        <!-- Savings Rate Card -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Savings Rate</span>
+                <div class="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-sm">
+                    <i class="fa-solid fa-piggy-bank"></i>
+                </div>
+            </div>
+            <p class="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+                {{ cash_flow.savings_rate }}%
+            </p>
+            <span class="text-[11px] font-semibold {% if cash_flow.savings_rate >= 20 %}text-emerald-500{% else %}text-amber-500{% endif %} mt-1 inline-block">
+                {% if cash_flow.savings_rate >= 20 %}Target met (>=20%){% else %}Target: 20%+{% endif %}
+            </span>
+        </div>
+    </div>
+
+    <!-- Filters & Action Header -->
+    <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <form method="GET" class="flex flex-wrap items-center gap-3">
+            <div>
+                <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">From</label>
+                <input type="date" name="start_date" value="{{ filters.start_date }}" class="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500">
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">To</label>
+                <input type="date" name="end_date" value="{{ filters.end_date }}" class="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500">
+            </div>
+            <div class="pt-4 flex items-center space-x-2">
+                <button type="submit" class="px-3.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-xs font-bold rounded-xl transition-colors">
+                    Filter
+                </button>
+                {% if filters.start_date or filters.end_date %}
+                <a href="{{ url_for('income_page') }}" class="text-xs text-slate-400 hover:text-slate-600 font-medium">Clear</a>
+                {% endif %}
+            </div>
+        </form>
+
+        <div class="flex items-center space-x-2">
+            <button onclick="openTransferModal()" class="py-2.5 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs rounded-xl transition-colors flex items-center space-x-1.5 shadow-sm">
+                <i class="fa-solid fa-arrow-right-arrow-left text-teal-600"></i>
+                <span>Transfer Money</span>
+            </button>
+            <button onclick="openAddIncomeModal()" class="py-2.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-600/20 active:scale-95 transition-all flex items-center space-x-1.5">
+                <i class="fa-solid fa-plus"></i>
+                <span>Log Income</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Income Records Table -->
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+                <i class="fa-solid fa-list-check text-emerald-500"></i>
+                <span>Income Ledger</span>
+            </h3>
+            <span class="text-xs text-slate-400">{{ incomes|length }} records found</span>
+        </div>
+
+        {% if incomes %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50/75 dark:bg-slate-800/50 text-[11px] uppercase tracking-wider text-slate-400 font-bold border-b border-slate-100 dark:border-slate-800">
+                    <tr>
+                        <th class="py-3.5 px-6">Date</th>
+                        <th class="py-3.5 px-6">Source / Payer</th>
+                        <th class="py-3.5 px-6">Account</th>
+                        <th class="py-3.5 px-6">Method</th>
+                        <th class="py-3.5 px-6">Notes</th>
+                        <th class="py-3.5 px-6 text-right">Amount</th>
+                        <th class="py-3.5 px-6 text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                    {% for inc in incomes %}
+                    <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                        <td class="py-3.5 px-6 font-medium text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                            {{ inc.date }}
+                        </td>
+                        <td class="py-3.5 px-6">
+                            <span class="font-bold text-slate-900 dark:text-white">{{ inc.source }}</span>
+                        </td>
+                        <td class="py-3.5 px-6">
+                            {% if inc.account_name %}
+                            <span class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                <span class="w-2 h-2 rounded-full" style="background-color: {{ inc.account_color or '#0D9488' }};"></span>
+                                <span>{{ inc.account_name }}</span>
+                            </span>
+                            {% else %}
+                            <span class="text-slate-400 italic">Direct Cash / External</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3.5 px-6 text-slate-500">
+                            {{ inc.payment_method }}
+                        </td>
+                        <td class="py-3.5 px-6 text-slate-400 truncate max-w-xs">
+                            {{ inc.notes or "-" }}
+                        </td>
+                        <td class="py-3.5 px-6 text-right font-extrabold text-emerald-600 dark:text-emerald-400 text-sm whitespace-nowrap">
+                            +{{ currency.symbol }}{{ "{:,.2f}".format(inc.amount) }}
+                        </td>
+                        <td class="py-3.5 px-6 text-center whitespace-nowrap">
+                            <div class="inline-flex items-center space-x-1">
+                                <button onclick="editIncome({{ inc.id }})" class="p-1.5 rounded-lg text-slate-400 hover:text-teal-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Edit Income">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                                <button onclick="deleteIncome({{ inc.id }})" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Delete Income">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-16 px-4 space-y-3">
+            <div class="w-16 h-16 mx-auto rounded-2xl bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 flex items-center justify-center text-2xl">
+                <i class="fa-solid fa-money-bill-wave"></i>
+            </div>
+            <h4 class="text-base font-bold text-slate-800 dark:text-slate-200">No Income Streams Logged Yet</h4>
+            <p class="text-xs text-slate-400 max-w-sm mx-auto">
+                Recording your salary, freelancing, and returns provides accurate net cash flow and real-time bank account reconciliation.
+            </p>
+            <button onclick="openAddIncomeModal()" class="inline-flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-md">
+                <i class="fa-solid fa-plus"></i>
+                <span>Log First Income</span>
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

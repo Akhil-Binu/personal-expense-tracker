@@ -1,22 +1,22 @@
-# 💰 FinanceFlow — Personal Expense Tracker
+# 💰 FinanceFlow — Personal Expense & Wealth Tracker (v2.0.0)
 
 <div align="center">
 
-[![Release](https://img.shields.io/badge/Release-v1.0.0-0D9488.svg?style=for-the-badge&logo=github)](https://github.com/Akhil-Binu/personal-expense-tracker/releases/tag/v1.0.0)
+[![Release](https://img.shields.io/badge/Release-v2.0.0-0D9488.svg?style=for-the-badge&logo=github)](https://github.com/Akhil-Binu/personal-expense-tracker/releases/tag/v2.0.0)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-PythonAnywhere-22c55e.svg?style=for-the-badge&logo=pythonanywhere&logoColor=white)](https://akhilbinu.pythonanywhere.com)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Framework-Flask%203.1-black.svg?style=for-the-badge&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
 [![SQLite](https://img.shields.io/badge/Database-SQLite3-003B57.svg?style=for-the-badge&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
-[![Excel](https://img.shields.io/badge/Spreadsheets-openpyxl-217346.svg?style=for-the-badge&logo=microsoftexcel&logoColor=white)](https://openpyxl.readthedocs.io/)
-[![TailwindCSS](https://img.shields.io/badge/UI-TailwindCSS-06B6D4.svg?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-[![Chart.js](https://img.shields.io/badge/Charts-Chart.js%204-FF6384.svg?style=for-the-badge&logo=chartdotjs&logoColor=white)](https://www.chartjs.org/)
+[![PWA](https://img.shields.io/badge/PWA-Installable-purple.svg?style=for-the-badge&logo=pwa&logoColor=white)](https://web.dev/progressive-web-apps/)
+[![OCR](https://img.shields.io/badge/AI_OCR-Tesseract.js-orange.svg?style=for-the-badge)](https://tesseract.projectnaptha.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 <br/>
 
-**A sleek, responsive, and full-featured Personal Expense Tracker built with Python, SQLite, and Excel.**  
-Track daily spending, categorize transactions, manage multiple bank accounts with an aggregated combined net balance, adjust monthly budgets, explore visual analytics, and export multi-sheet Excel reports — natively responsive across **Mobile**, **Tablet**, and **Desktop** devices.
+**A modern, full-stack Personal Expense & Wealth Management Web Application built with Python, SQLite, and Progressive Web App (PWA) capabilities.**  
+Track daily spending and income streams, reconcile multi-account balances, manage recurring subscriptions, monitor financial goals, run client-side AI receipt OCR scans, stay protected with RFC 6238 TOTP Two-Factor Authentication, and export publication-ready PDF statements.
 
-[Features](#-key-features) • [Quick Start](#-quick-start-guide) • [Multi-Device](#-multi-device-responsive-design) • [Architecture](#-architecture) • [API Docs](#-rest-api-reference) • [Release Notes](#-v100-release-notes)
+[Live Demo](https://akhilbinu.pythonanywhere.com) • [v2.0 Features](#-whats-new-in-v20) • [Quick Start](#-quick-start-guide) • [Architecture](#-architecture--tech-stack) • [API Docs](#-rest-api-reference) • [Release Notes](#-v200-release-notes)
 
 </div>
 
@@ -24,47 +24,64 @@ Track daily spending, categorize transactions, manage multiple bank accounts wit
 
 ## 📖 Table of Contents
 
+- [What's New in Version 2.0](#-whats-new-in-v20)
 - [Key Features](#-key-features)
-- [Multi-Device Responsive Design](#-multi-device-responsive-design)
+- [Live Demo & Cloud Deployment](#-live-demo--cloud-deployment)
 - [Architecture & Tech Stack](#-architecture--tech-stack)
 - [Quick Start Guide](#-quick-start-guide)
-- [Mobile & Tablet Setup](#-accessing-on-mobile--tablet)
-- [Multi-Bank Accounts & Combined Balance](#-multi-bank-accounts--combined-balance)
+- [Progressive Web App (PWA) & Mobile Installation](#-progressive-web-app-pwa--mobile-installation)
+- [Income Streams & Net Cash Flow](#-income-streams--net-cash-flow)
+- [Recurring Bills & Subscriptions](#-recurring-bills--subscriptions)
+- [Financial Goals & Savings Pockets](#-financial-goals--savings-pockets)
+- [Smart AI Receipt OCR Scanner](#-smart-ai-receipt-ocr-scanner)
+- [Smart AI Spending Insights & Budget Velocity](#-smart-ai-spending-insights--budget-velocity)
+- [Two-Factor Authentication (2FA) Security](#-two-factor-authentication-2fa-security)
+- [Printable Financial Statements & PDF Export](#-printable-financial-statements--pdf-export)
 - [Interactive Monthly Budget Editor](#-interactive-monthly-budget-editor)
 - [Excel Spreadsheet Integration](#-excel-spreadsheet-integration)
-- [Decentralized Account Recovery](#-account-creation--backup-keywords-system)
-- [Supported Currencies](#-supported-currencies)
 - [REST API Reference](#-rest-api-reference)
 - [Automated Testing Suite](#-automated-testing-suite)
 - [Repository Structure](#-repository-structure)
-- [v1.0.0 Release Notes](#-v100-release-notes)
+- [v2.0.0 Release Notes](#-v200-release-notes)
 - [License](#-license)
+
+---
+
+## 🚀 What's New in Version 2.0
+
+FinanceFlow v2.0 evolves from an expense tracker into a comprehensive **personal finance and wealth management hub**:
+
+1. 💵 **Income Streams & Net Cash Flow Ledger**: Complete tracking of monthly salaries, freelance income, investments, and side hustles. Real-time net savings rate calculations and inter-account transfers with automatic balance reconciliation.
+2. 🔁 **Recurring Bills & Subscriptions Tracker**: Track Netflix, Spotify, gym memberships, utilities, and software licenses. Visual due date countdowns, monthly commitment summaries, and **1-click "Mark as Paid"** logging.
+3. 🎯 **Financial Goals & Savings Pockets**: Set savings milestones (e.g., *Emergency Fund, Vacation, Down Payment*) with target dates, visual progress rings, recommended monthly savings pace calculators, and 1-click contributions.
+4. 🧾 **Smart Browser-Side AI Receipt OCR Scanner**: Point camera or upload receipt images directly in browser. Utilizes **Tesseract.js** in a Web Worker to extract transaction amounts, dates, and vendor names with zero server lag.
+5. 🧠 **AI Spending Insights & Budget Velocity Engine**: Proactively detects budget burn acceleration, alerts on overruns before month-end, and suggests optimizations based on historical trends.
+6. 📱 **Progressive Web App (PWA) Capabilities**: Install directly to iOS and Android home screens as a standalone app with offline asset caching and service worker support.
+7. 🖨️ **Printable Executive Financial Statements & PDF Export**: Dedicated `/statement` route optimized for `@media print` layout and clean PDF export.
+8. 🛡️ **RFC 6238 TOTP Two-Factor Authentication (2FA)**: High-security authentication pairing with Google Authenticator, Authy, or 1Password via QR code canvas, backed by 12-word mnemonic recovery phrase fallback.
 
 ---
 
 ## ✨ Key Features
 
-- 🏛️ **Multi-Bank Accounts & Combined Net Balance**: Link and manage multiple checking, savings, digital wallets (UPI/PayPal/Apple Cash), and investment accounts. Automatically aggregate starting balances minus all categorized expenses into **one combined net financial balance**.
-- 🎯 **Interactive Monthly Budget Editor**: Easily set and edit overall monthly budget targets directly from the Dashboard or Categories view. Features **1-click proportional auto-scaling**, **even split**, and fine-grained per-category limit inputs with real-time recalculation.
-- 🔐 **Account Creation & 12-Word Mnemonic Backup**: Create private user accounts with decentralized 12-word backup recovery phrases (BIP-39 standard). Reset passwords and recover accounts securely without relying on third-party email services.
-- 📱 **Responsive Multi-Device Web App**: Custom adaptive interfaces optimized for **Mobile** (bottom navigation bar, floating `+` quick-add button, touch-friendly bottom sheets), **Tablet** (adaptive 2-column cards), and **Desktop** (comprehensive metrics strip and left navigation sidebar).
-- 💵 **Dynamic 10+ Multi-Currency Engine**: Switch currencies on the fly across **USD ($)**, **INR (₹)**, **EUR (€)**, **GBP (£)**, **JPY (¥)**, **CAD (C$)**, **AUD (A$)**, **AED**, **SGD (S$)**, and **CHF**. Updates all charts, tables, budgets, and Excel exports dynamically.
-- 📊 **Interactive Financial Analytics**: High-performance Chart.js graphs for category distribution (doughnut), daily spending trends (bar), 6-month historical comparisons, and payment method share.
-- 📑 **Executive Excel Integration**: Export multi-sheet `.xlsx` reports featuring live Excel formulas (`=SUM(...)`), currency formatting, zebra striping, auto-filters, and dedicated sheets for Executive Summary, Transactions, and Bank Accounts.
-- 📥 **Spreadsheet Import & Template**: Bulk import expense histories from Excel workbooks with automated category resolution, plus 1-click starter template download.
-- 🌓 **Dark / Light Mode**: Instant theme switching with persistent user preference and automatic Chart.js palette synchronization.
+- 🏛️ **Multi-Bank Accounts & Consolidated Net Worth**: Track checking, savings, credit cards, digital wallets, and brokerage accounts. Calculates real-time balances: `Current Balance = Initial Balance + Income - Expenses + Transfers In - Transfers Out`.
+- 🎯 **Interactive Budget Velocity Editor**: Set overall target budgets with 1-click **proportional auto-scaling**, **even split**, and per-category limits.
+- 🔐 **Decentralized 12-Word Mnemonic Recovery**: BIP-39 compatible 12-word backup keywords for zero-email password recovery.
+- 💵 **Multi-Currency Engine**: Seamless live switching across **USD ($)**, **INR (₹)**, **EUR (€)**, **GBP (£)**, **JPY (¥)**, **CAD (C$)**, **AUD (A$)**, **AED**, **SGD (S$)**, and **CHF**.
+- 📊 **Dynamic Visualizations**: High-performance Chart.js charts for category distribution, daily trends, 6-month comparisons, and payment methods.
+- 📑 **Executive Excel Engine**: Multi-sheet `.xlsx` reports featuring live Excel formulas (`=SUM(...)`), currency formatting, and auto-filters.
+- 🌓 **Dark / Light Mode**: Instant theme switching with persistent local storage and automated Chart.js palette synchronization.
 
 ---
 
-## 📱 Multi-Device Responsive Design
+## 🌐 Live Demo & Cloud Deployment
 
-FinanceFlow is built from the ground up to provide a first-class native app experience on any screen size:
+FinanceFlow is deployed and accessible worldwide:
 
-| Platform | Layout & Interaction Highlights |
-| :--- | :--- |
-| **Desktop Web App** | Fixed left sidebar navigation, top metrics bar with currency & month pickers, side-by-side interactive charts, full-featured transactional data table with multi-criteria filters, and quick modal popups. |
-| **Tablet Web App** | Touch-optimized 2-column layout, adaptive charts that rescale gracefully on rotation, comfortable tap targets, and responsive category budget cards. |
-| **Mobile Web App** | Native bottom navigation bar (*Home, Expenses, Floating Quick-Add (+), Accounts, Reports*), mobile card transactions, numeric keyboard optimization (`inputmode="decimal"`), and touch-friendly bottom sheets. |
+- **Live URL**: [https://akhilbinu.pythonanywhere.com](https://akhilbinu.pythonanywhere.com)
+- **Demo Credentials**:
+  - **Username**: `admin`
+  - **Password**: `admin123` *(or register your own private account in seconds)*
 
 ---
 
@@ -72,42 +89,51 @@ FinanceFlow is built from the ground up to provide a first-class native app expe
 
 ```mermaid
 flowchart TD
-    subgraph Client["Frontend Client (Responsive Web App)"]
+    subgraph Client["Frontend Client (PWA & Responsive Web)"]
         A["Desktop Browser"]
-        B["Tablet Browser"]
-        C["Mobile Browser (PWA Feel)"]
+        B["Mobile / Tablet PWA"]
         UI["Tailwind CSS + FontAwesome + Chart.js 4"]
+        OCR["Tesseract.js OCR (Web Worker)"]
+        SW["Service Worker (Cache-First Assets)"]
+        QR["QRCode.js (2FA Canvas)"]
         A --> UI
         B --> UI
-        C --> UI
+        UI --> OCR
+        UI --> SW
+        UI --> QR
     end
 
     subgraph Server["Flask Application Server (Python 3)"]
-        AUTH["Auth Service (BIP-39 Mnemonic + Password Hash)"]
-        ROUTES["Web Views & Template Engine (Jinja2)"]
-        API["JSON REST API Endpoints"]
-        EXCEL["Excel Service (openpyxl Multi-Sheet Engine)"]
+        AUTH["Auth Service (Argon2/PBKDF2 + RFC 6238 TOTP + BIP-39)"]
+        AI["AI Insights & Budget Velocity Engine"]
+        EXCEL["Excel Service (openpyxl Multi-Tab Engine)"]
+        ROUTES["Web Views & Jinja2 Template Engine"]
+        API["REST API (55+ Endpoints)"]
     end
 
-    subgraph Storage["Persistent Storage"]
+    subgraph Storage["Persistent Storage & Assets"]
         DB[("SQLite 3 Database (expenses.db)")]
-        FILES["Exported Excel Workbooks (.xlsx)"]
+        RECEIPTS["Receipt Uploads (/static/uploads/receipts/)"]
+        EXPORTS["Generated Excel / PDF Files"]
     end
 
-    UI <-->|HTTP / JSON API| Server
+    UI <-->|HTTP / REST JSON| Server
     ROUTES --> AUTH
     API --> AUTH
+    ROUTES --> AI
     ROUTES --> DB
     API --> DB
     EXCEL <--> DB
-    EXCEL --> FILES
+    API --> RECEIPTS
+    EXCEL --> EXPORTS
 ```
 
 - **Backend**: Python 3.10+ & Flask 3.1
-- **Database**: SQLite3 with foreign keys, transactional integrity, and compound indexes
-- **Spreadsheets / Reporting**: `openpyxl` (multi-sheet formatted `.xlsx` generation & parsing)
-- **Frontend**: HTML5, Tailwind CSS, FontAwesome 6, Chart.js 4
-- **Security**: Salted Werkzeug password hashing & 12-word recovery phrase verification
+- **Database**: SQLite3 with strict foreign keys, multi-user schemas, and compound index optimization
+- **Spreadsheets & Reporting**: `openpyxl` for multi-tab `.xlsx` workbooks
+- **Frontend**: HTML5, Tailwind CSS, FontAwesome 6, Chart.js 4, QRCode.js
+- **Client-Side AI**: Tesseract.js Web Worker for receipt scanning
+- **Security**: Salted PBKDF2-HMAC-SHA256 password hashing, pure-Python RFC 6238 TOTP, and 12-word mnemonic backup phrases
 
 ---
 
@@ -119,7 +145,7 @@ git clone https://github.com/Akhil-Binu/personal-expense-tracker.git
 cd personal-expense-tracker
 ```
 
-### 2. Set Up Python Virtual Environment
+### 2. Set Up Virtual Environment
 ```bash
 # Create virtual environment
 python -m venv .venv
@@ -137,112 +163,112 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Run the Application
+### 4. Launch Application
 ```bash
 python run.py
 ```
 
-The smart launcher will display local and Wi-Fi access links and automatically open your default browser:
-- **Desktop Web App**: `http://localhost:5000`
-- **Mobile / Tablet (on same Wi-Fi)**: `http://<your-lan-ip>:5000` *(e.g. `http://192.168.1.50:5000`)*
+The smart launcher will display access URLs and open your browser:
+- **Desktop**: `http://localhost:5000`
+- **Mobile / Tablet (Same Wi-Fi)**: `http://<your-lan-ip>:5000` *(e.g. `http://192.168.1.50:5000`)*
 
 ---
 
-## 📲 Accessing on Mobile & Tablet
+## 📱 Progressive Web App (PWA) & Mobile Installation
 
-1. Connect your smartphone or tablet to the **same Wi-Fi network** as your host computer.
-2. Launch `python run.py`.
-3. Note the **Tablet / Mobile URL** printed in the terminal (e.g., `http://192.168.x.x:5000`).
-4. Open Chrome or Safari on your phone and browse to that address.
-5. *(Tip)* Tap **"Add to Home Screen"** in Safari / Chrome for a standalone full-screen web app experience!
+FinanceFlow v2.0 is an installable Progressive Web App:
+
+1. Open `http://localhost:5000` or the live demo `https://akhilbinu.pythonanywhere.com` on your mobile browser (Safari on iOS or Chrome on Android).
+2. Tap the browser share / options menu.
+3. Select **"Add to Home Screen"**.
+4. FinanceFlow will launch in standalone full-screen mode with an app icon on your home screen, independent window controls, and offline asset caching via `service-worker.js`.
 
 ---
 
-## 🏛️ Multi-Bank Accounts & Combined Balance
+## 💵 Income Streams & Net Cash Flow
 
-FinanceFlow makes managing multiple accounts effortless:
+- **Income Logging**: Record recurring salaries, freelance milestones, dividends, and interest payments with linked bank accounts.
+- **Net Cash Flow Ledger**: Calculates `Net Cash Flow = Total Income - Total Expenses` and displays your monthly **Savings Rate (%)**.
+- **Inter-Account Transfers**: Move funds between Checking, Savings, and Wallets with full balance reconciliation and transfer history.
 
-- **Add Multiple Accounts**: Create accounts for Checking, Savings, Digital Wallets (UPI, PayPal, Apple Cash), Credit Cards, or Brokerage.
-- **Custom Visuals**: Assign custom colors and icons (`fa-building-columns`, `fa-piggy-bank`, `fa-wallet`, `fa-credit-card`, `fa-mobile-screen`, `fa-vault`).
-- **Initial Balances & Masked Numbers**: Record starting funds and optional last 4 digits (e.g. `•••• 4821`).
-- **Automated Expense Deductions**: When logging an expense, pick which bank account paid for it. The system automatically reduces that account's balance in real time.
-- **Combined Net Balance**: View an aggregated real-time calculation of your total net worth across all bank accounts in one central banner.
-- **Type Breakdown**: View aggregated balances grouped by account type (*Checking, Savings, Wallets*).
+---
+
+## 🔁 Recurring Bills & Subscriptions
+
+- **Commitment Tracker**: Log all recurring monthly, weekly, quarterly, or yearly subscriptions.
+- **Due Date Countdowns**: Visual badges indicate days remaining until renewal.
+- **1-Click "Mark as Paid"**: When a bill is due, click **"Pay"** to automatically log the transaction under its assigned category and bank account and advance the next due date by one billing cycle.
+
+---
+
+## 🎯 Financial Goals & Savings Pockets
+
+- **Custom Savings Targets**: Create goals for emergency funds, vacations, investments, or gadget upgrades.
+- **Progress Tracking**: Real-time progress percentage rings and remaining balance counters.
+- **Automated Savings Pace**: Dynamically calculates `Suggested Monthly Savings` based on your deadline.
+- **1-Click Contributions**: Deposit funds directly from any bank account into a savings goal with instant balance deduction.
+
+---
+
+## 🧾 Smart AI Receipt OCR Scanner
+
+- **Browser-Side OCR**: Uses **Tesseract.js** in a background Web Worker to parse receipt text without sending raw images to heavy third-party servers.
+- **Automated Field Extraction**: Uses regular expressions and token heuristics to identify:
+  - **Total Amount**: Finds lines with `TOTAL`, `BALANCE DUE`, `AMOUNT`, or currency markers.
+  - **Date**: Extracts formats like `YYYY-MM-DD`, `DD/MM/YYYY`, or `Month DD, YYYY`.
+  - **Vendor / Description**: Suggests merchant name from receipt header text.
+- **Secure File Storage**: Attaches receipt images to expenses with an interactive in-browser lightbox modal viewer.
+
+---
+
+## 🧠 Smart AI Spending Insights & Budget Velocity
+
+The built-in analytics engine (`analytics_service.py`) provides real-time financial intelligence:
+
+- **Budget Velocity**: Compares days passed in the month against budget consumption percentage to calculate daily run rate and forecast month-end overruns.
+- **Overrun Warnings**: Color-coded danger/warning badges pinpoint which categories require immediate attention.
+- **Savings Rate Benchmarks**: Assesses whether your retained savings exceed the healthy 20% rule.
+- **Upcoming Bills Summary**: Highlights subscriptions renewing within the next 7 days and calculates annual commitments.
+
+---
+
+## 🛡️ Two-Factor Authentication (2FA) Security
+
+- **RFC 6238 TOTP Standard**: Compatible with all standard authenticator apps (Google Authenticator, Microsoft Authenticator, Authy, 1Password, Bitwarden).
+- **Interactive QR Code Canvas**: Generated on the client using `qrcode.js` for instant smartphone camera scanning.
+- **Mnemonic Fallback**: If an authenticator device is lost, users can bypass 2FA using their 12-word BIP-39 recovery keywords.
+- **Zero Remote Dependencies**: TOTP generation and validation implemented purely in Python standard library (`hmac`, `hashlib`, `struct`).
+
+---
+
+## 🖨️ Printable Financial Statements & PDF Export
+
+Navigate to `/statement` to view an executive statement for any custom date range:
+- Branded letterhead and period summary
+- Executive Cash Flow & Net Savings KPIs
+- Income stream ledger
+- Categorized expense summary
+- Individual bank account balances
+- Built-in `@media print` CSS stylesheet: clicking **"Print / Export PDF"** triggers clean formatting with hidden navigation chrome, page breaks, and high-contrast typography.
 
 ---
 
 ## 🎯 Interactive Monthly Budget Editor
 
-Take full control of your monthly spending targets:
-
-- **Quick Dashboard Editing**: Click the **"Edit"** button on the Dashboard's **Monthly Budget KPI card** to adjust budgets without navigating away.
-- **Overall Target Budget**: Type a total target budget (e.g., `$3,500.00`).
-- **Auto-Scale Proportionally**: 1-click button that scales all category spending limits proportionally to match your new target while preserving spending ratios.
-- **Split Evenly**: 1-click button that divides the target budget equally among all categories.
-- **Per-Category Controls**: Numeric inputs for each individual category with live percentage allocations that recalculate in real-time.
-- **Visual Thresholds**: Color-coded indicators notify you when a category is *On Track (<80%)*, *Near Limit (80-100%)*, or *Over Budget (>100%)*.
+- **Dashboard KPI Editing**: Click **"Edit"** on the Monthly Budget card to modify targets on the fly.
+- **Auto-Scale Proportionally**: 1-click button adjusts all category spending limits proportionally to match a new total target.
+- **Split Evenly**: Distributes your overall monthly budget equally across all categories.
+- **Per-Category Controls**: Direct numeric inputs with live recalculation of percentage shares.
 
 ---
 
 ## 📑 Excel Spreadsheet Integration
 
-### 1. Multi-Sheet Executive Summary Export (.xlsx)
-Generates an Excel workbook formatted with executive aesthetics:
-- **Sheet 1: Executive Summary**:
-  - Branded header banner and KPI cards (*Total Spent, Monthly Budget, Remaining Buffer, Daily Average, Total Transactions, Top Category*).
-  - Category Breakdown Table with live formulas (`=B9-C9`), budget utilization percentage, and active currency formatting.
-  - Payment Methods Overview with transaction shares.
-- **Sheet 2: All Transactions**:
-  - Full transactional log: ID, Date, Category, Description, Payment Method, Bank Account, Amount, Notes.
-  - Native Excel `=SUM(...)` total formula and table auto-filters enabled.
-- **Sheet 3: Bank Accounts & Net Balance**:
-  - Breakdown of all bank accounts, starting balances, deductions, and current net balances.
-  - Bottom row with `=SUM(...)` formula computing the **Combined Total Net Balance**.
-
-### 2. Bulk Spreadsheet Import
-- Click **"Import"** or **"Import Excel"** to upload any `.xlsx` spreadsheet.
-- Maps headers (`Date`, `Category`, `Amount`, `Payment Method`, `Description`, `Notes`).
-- Auto-creates new categories if they do not exist.
-- Download a pre-formatted template with 1-click via the import dialog.
-
----
-
-## 🔐 Account Creation & Backup Keywords System
-
-FinanceFlow includes user authentication designed for privacy and resilience:
-
-1. **Sign Up**:
-   - Create your personal account with a unique username and password.
-   - The app automatically creates a private sandbox for your expenses and budgets.
-
-2. **12-Word Backup Keywords (Recovery Phrase)**:
-   - When registering, FinanceFlow generates **12 cryptographically random, memorable dictionary words** (e.g., `acorn amber anchor beacon blossom clover...`).
-   - You can copy them or download them as a `.txt` file.
-   - The recovery phrase is securely hashed in SQLite using salted Werkzeug hashes.
-
-3. **Account Recovery & Password Reset**:
-   - If you ever forget your password, navigate to **Forgot Password?** (`/recover`).
-   - Enter your username, type or paste your **12 backup keywords**, and set your new password.
-   - Instant recovery with **zero external email dependencies**.
-
----
-
-## 🪙 Supported Currencies
-
-Switch between currencies anytime from the top navigation bar:
-
-| Currency | Code | Symbol | Sample Format |
-| :--- | :--- | :---: | :--- |
-| **US Dollar** | `USD` | `$` | `$1,250.00` |
-| **Indian Rupee** | `INR` | `₹` | `₹1,250.00` |
-| **Euro** | `EUR` | `€` | `€1,250.00` |
-| **British Pound** | `GBP` | `£` | `£1,250.00` |
-| **Japanese Yen** | `JPY` | `¥` | `¥1,250.00` |
-| **Canadian Dollar** | `CAD` | `C$` | `C$1,250.00` |
-| **Australian Dollar** | `AUD` | `A$` | `A$1,250.00` |
-| **UAE Dirham** | `AED` | `AED` | `AED 1,250.00` |
-| **Singapore Dollar** | `SGD` | `S$` | `S$1,250.00` |
-| **Swiss Franc** | `CHF` | `CHF` | `CHF 1,250.00` |
+- **Multi-Sheet Export (`.xlsx`)**:
+  - *Sheet 1 (Executive Summary)*: KPI cards, category table with live `=B9-C9` formulas, payment method breakdown.
+  - *Sheet 2 (All Transactions)*: Detailed log with `=SUM(...)` totals and auto-filters.
+  - *Sheet 3 (Bank Accounts)*: Complete list of accounts, initial balances, deductions, and consolidated net worth.
+- **Bulk Spreadsheet Import**: Upload `.xlsx` files to import historical data with automatic category creation. Pre-formatted starter template downloadable with 1-click.
 
 ---
 
@@ -250,34 +276,46 @@ Switch between currencies anytime from the top navigation bar:
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `POST` | `/register` | Register a new user account and receive 12 backup keywords |
-| `POST` | `/login` | Authenticate user credentials and create session |
-| `POST` | `/recover` | Reset password using 12 mnemonic backup keywords |
+| `POST` | `/register` | Register new account and generate 12 backup keywords |
+| `POST` | `/login` | Authenticate user credentials (prompts for 2FA if enabled) |
+| `POST` | `/verify-2fa` | Complete login session using 6-digit TOTP code or backup phrase |
+| `POST` | `/recover` | Reset password using 12 backup keywords |
+| `POST` | `/api/2fa/setup` | Generate TOTP secret and QR code URI for user |
+| `POST` | `/api/2fa/verify-and-enable` | Verify 6-digit code and activate 2FA on account |
+| `POST` | `/api/2fa/disable` | Disable 2FA on account |
+| `GET` | `/api/2fa/status` | Check if 2FA is currently active for authenticated user |
+| `GET` | `/api/income` | List user income streams for selected month or range |
+| `POST` | `/api/income` | Add a new income stream and credit bank account |
+| `GET/PUT/DELETE` | `/api/income/<id>` | Retrieve, edit, or delete an income record |
+| `POST` | `/api/transfer` | Execute an inter-account fund transfer |
+| `DELETE` | `/api/transfer/<id>` | Delete an inter-account transfer and revert balances |
+| `GET` | `/api/subscription` | List all recurring subscriptions |
+| `POST` | `/api/subscription` | Create a new recurring subscription |
+| `GET/PUT/DELETE` | `/api/subscription/<id>`| Retrieve, update, or delete a recurring subscription |
+| `POST` | `/api/subscription/<id>/pay`| 1-click mark bill paid, log expense, and advance due date |
+| `GET` | `/api/goal` | List all savings goals and completion percentages |
+| `POST` | `/api/goal` | Create a new financial goal |
+| `GET/PUT/DELETE` | `/api/goal/<id>` | Retrieve, update, or delete a savings goal |
+| `POST` | `/api/goal/<id>/contribute` | Deposit funds from bank account into a savings goal |
+| `GET` | `/api/insights` | Retrieve AI spending insights and budget alerts |
 | `GET` | `/api/chart-data` | Retrieve series data for category, daily, history, and payment charts |
-| `POST` | `/api/expense` | Add a new expense (with optional `account_id` deduction) |
-| `GET` | `/api/expense/<id>` | Retrieve single expense record details |
-| `PUT` | `/api/expense/<id>` | Update an existing expense record |
-| `POST` | `/api/expense/<id>/delete` | Delete an expense record |
-| `GET` | `/api/account` | Retrieve list of all user bank accounts and balances |
-| `POST` | `/api/account` | Add a new bank account with initial balance |
-| `GET` | `/api/account/<id>` | Retrieve single bank account details |
-| `PUT` | `/api/account/<id>` | Update bank account details |
-| `POST` | `/api/account/<id>/delete` | Delete a bank account (safely unlinks transactions) |
-| `GET` | `/api/budget` | Retrieve total budget, spend, and all category limits |
-| `POST` | `/api/budget` | Update monthly budget (batch categories or proportional target) |
+| `POST` | `/api/expense` | Add expense (supports multipart receipt upload) |
+| `GET/PUT/DELETE` | `/api/expense/<id>` | Retrieve, update, or delete an expense record |
+| `GET` | `/api/account` | Retrieve all bank accounts and calculated net balances |
+| `POST` | `/api/account` | Create a new bank account with starting balance |
+| `GET/PUT/DELETE` | `/api/account/<id>` | Retrieve, update, or delete a bank account |
+| `GET/POST`| `/api/budget` | Retrieve or batch update category monthly budgets |
 | `PUT` | `/api/category/<id>/budget`| Update single category monthly budget |
-| `POST` | `/api/category` | Create a new custom category |
-| `PUT` | `/api/category/<id>` | Update category name, icon, color, and budget |
-| `POST` | `/api/category/<id>/delete` | Delete a category (if no transactions linked) |
-| `GET/POST`| `/api/settings/currency` | Get or update the active currency |
+| `GET/POST`| `/api/settings/currency` | Get or update active currency |
 | `GET` | `/export/excel` | Download formatted multi-sheet `.xlsx` report |
-| `POST` | `/import/excel` | Upload `.xlsx` file and bulk import expenses |
+| `GET` | `/export/template` | Download Excel starter import template |
+| `POST` | `/import/excel` | Upload `.xlsx` file and bulk import transactions |
 
 ---
 
 ## 🧪 Automated Testing Suite
 
-FinanceFlow includes an automated unit test suite covering authentication, multi-bank accounts, combined balance aggregation, budget scaling, expense CRUD, currency changes, and Excel import/export:
+FinanceFlow v2.0 features an automated test suite verifying all core database operations, API endpoints, PWA assets, income/transfers, subscriptions, goals, 2FA security, AI insights, and receipt handling:
 
 ```bash
 .\.venv\Scripts\python.exe -m unittest test_app.py
@@ -285,9 +323,9 @@ FinanceFlow includes an automated unit test suite covering authentication, multi
 
 Output:
 ```
-...........
+..................
 ----------------------------------------------------------------------
-Ran 11 tests in 1.848s
+Ran 18 tests in 2.538s
 
 OK
 ```
@@ -298,48 +336,63 @@ OK
 
 ```
 personal-expense-tracker/
-├── app.py                # Flask server, authentication, page routes & REST endpoints (v1.0.0)
-├── auth_service.py       # Password hashing & 12-word mnemonic recovery phrase generator
-├── database.py           # SQLite connection, multi-user schema & transactional queries
-├── excel_service.py      # openpyxl formatted workbook generator & parser
-├── run.py                # Smart launcher with local LAN IP resolution
-├── test_app.py           # Comprehensive unit tests (all 11 tests passing)
-├── requirements.txt      # Frozen pip dependencies
-├── .gitignore            # Git exclusion rules
-├── LICENSE               # MIT License
-├── README.md             # Project documentation & release manual
+├── app.py                   # Flask server, authentication, v2.0 routes & 55+ REST endpoints
+├── database.py              # SQLite schema migrations, multi-account ledger, income & goals
+├── auth_service.py          # Salted password hashing, RFC 6238 TOTP, and BIP-39 recovery
+├── analytics_service.py     # AI Spending Insights & Budget Velocity calculation engine
+├── excel_service.py         # openpyxl multi-tab formatted workbook generator & parser
+├── run.py                   # Smart launcher with local LAN IP resolution
+├── test_app.py              # Comprehensive test suite (18 unit tests, 100% passing)
+├── requirements.txt         # Frozen dependencies
+├── LICENSE                  # MIT License
+├── README.md                # Project documentation & release manual
 ├── static/
 │   ├── css/
-│   │   └── style.css     # Responsive styles, mobile touch rules, toast animations
-│   └── js/
-│       └── app.js        # Theme manager, Chart.js renderers, modals, currency API, accounts
+│   │   └── style.css        # Responsive styles, mobile touch rules, print stylesheet
+│   ├── js/
+│   │   └── app.js           # PWA SW reg, Tesseract OCR scanner, 2FA QRCode, Charts, Modals
+│   ├── icons/
+│   │   ├── icon-192.svg     # Scalable PWA app icon (192x192)
+│   │   └── icon-512.svg     # Scalable PWA app icon (512x512)
+│   ├── uploads/
+│   │   └── receipts/        # Directory for attached receipt scans & photos
+│   ├── manifest.json        # PWA application manifest
+│   └── service-worker.js    # Service worker with Cache-First static asset caching
 └── templates/
-    ├── base.html         # Responsive base layout (Desktop sidebar + Mobile bottom nav)
-    ├── login.html        # Clean login interface with recovery link
-    ├── register.html     # Account creation interface
-    ├── backup_keywords.html # 12-word mnemonic keywords presentation card
-    ├── recover.html      # Account recovery & password reset using 12 keywords
-    ├── index.html        # Main dashboard (Combined Balance banner, KPI cards, charts)
-    ├── accounts.html     # Bank Accounts & Combined Net Balance management view
-    ├── expenses.html     # Expenses table, advanced filters, search & Excel export
-    ├── reports.html      # Monthly reports, 4 interactive charts, variance table
-    └── categories.html   # Category budgets, limits & progress bars
+    ├── base.html            # Main layout with PWA headers, v2.0 navigation & global modals
+    ├── index.html           # Dashboard (Cash Flow banner, AI insights, velocity, charts)
+    ├── expenses.html        # Expense table, receipt badges, search & filters
+    ├── income.html          # Income streams ledger, category breakdown & metrics
+    ├── subscriptions.html   # Recurring bills grid, countdowns & 1-click pay
+    ├── goals.html           # Savings goals, progress bars & contribution modal
+    ├── statement.html       # Publication-ready printable financial statement & PDF export
+    ├── accounts.html        # Bank Accounts, Quick Transfers & aggregated Net Worth
+    ├── reports.html         # Monthly analytics, 4 Chart.js graphs & budget variance
+    ├── categories.html      # Category budgets, limits & progress bars
+    ├── login.html           # Clean login interface with recovery link
+    ├── verify_2fa.html      # TOTP 2FA challenge page with backup phrase fallback
+    ├── register.html        # Account creation interface
+    ├── backup_keywords.html # 12-word mnemonic recovery phrase card
+    └── recover.html         # Account recovery & password reset using 12 keywords
 ```
 
 ---
 
-## 📦 v1.0.0 Release Notes
+## 📦 v2.0.0 Release Notes
 
-### **v1.0.0 — Initial Official Release**
-*Date: October 25, 2026*
+### **v2.0.0 — Wealth Management & Security Upgrade**
+*Date: October 29, 2026*
 
-- **Multi-Bank Account Engine**: Support for multiple bank accounts, initial balance tracking, transaction linking, and aggregated combined net balance calculation.
-- **Interactive Monthly Budget Editor**: Modal budget editor with proportional auto-scaling, even distribution, and per-category limits.
-- **Decentralized User Accounts**: Mnemonic 12-word recovery keywords system for zero-email account reset.
-- **Multi-Currency System**: 10+ global currencies supported with dynamic UI and Excel formatting.
-- **Executive Excel Engine**: 3-sheet `.xlsx` export (Summary, All Transactions, Bank Accounts) with live `=SUM(...)` formulas.
-- **Full Responsive Experience**: Native app feel on Mobile, Tablet, and Desktop web browsers.
-- **Automated Test Coverage**: 11 unit tests ensuring zero regression across core functionality.
+- 💵 **Net Cash Flow & Income Streams**: Track income sources, monthly savings rate, and account-to-account transfers with automatic balance reconciliation.
+- 🔁 **Subscriptions & Recurring Bills**: Dedicated subscription dashboard with due date countdowns, annual commitment calculations, and 1-click pay logging.
+- 🎯 **Financial Goals & Savings Pockets**: Savings milestones with visual progress indicators, target date pace calculators, and 1-click bank contributions.
+- 🧾 **AI Receipt OCR Scanner**: Client-side OCR via Tesseract.js in a Web Worker, automatic extraction of total/date/vendor, and receipt lightbox viewer.
+- 🧠 **AI Spending Insights**: Real-time spending velocity alerts, burn rate analysis, and smart budgeting guidance.
+- 📱 **Progressive Web App (PWA)**: Full manifest, vector brand icons, and offline service worker caching for installable home screen experience on iOS/Android.
+- 🖨️ **Printable Financial Statement & PDF Export**: Executive `@media print` statement generator with KPI banners and tabular ledgers.
+- 🛡️ **RFC 6238 TOTP Two-Factor Authentication**: Pure Python 2FA security with QR code canvas pairing and mnemonic phrase fallback.
+- 🧪 **Expanded Test Suite**: 18 automated integration tests covering all v2.0 endpoints with 100% pass rate.
+- ☁️ **Live Deployment**: Live release deployed on PythonAnywhere at `https://akhilbinu.pythonanywhere.com`.
 
 ---
 

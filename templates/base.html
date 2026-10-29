@@ -43,6 +43,16 @@
     
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <!-- PWA Manifest & App Icons -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.svg') }}">
+    
+    <!-- Tesseract.js (Client-Side Offline Receipt OCR) -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    
+    <!-- QRCode.js (2FA Authenticator App Setup) -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 </head>
 <body class="h-full bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans transition-colors duration-200 antialiased selection:bg-teal-500 selection:text-white pb-20 md:pb-0">
 
@@ -56,57 +66,94 @@
                         <i class="fa-solid fa-wallet text-lg"></i>
                     </div>
                     <div>
-                        <span class="text-lg font-bold tracking-tight bg-gradient-to-r from-teal-700 to-teal-500 dark:from-teal-400 dark:to-emerald-300 bg-clip-text text-transparent">FinanceFlow</span>
-                        <p class="text-[10px] uppercase font-semibold text-slate-400 tracking-wider">Expense Tracker</p>
+                        <div class="flex items-center space-x-1.5">
+                            <span class="text-lg font-bold tracking-tight bg-gradient-to-r from-teal-700 to-teal-500 dark:from-teal-400 dark:to-emerald-300 bg-clip-text text-transparent">FinanceFlow</span>
+                            <span class="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20">v2.0</span>
+                        </div>
+                        <p class="text-[10px] uppercase font-semibold text-slate-400 tracking-wider">Wealth & Expenses</p>
                     </div>
                 </a>
             </div>
 
-            <!-- Quick Add Expense CTA -->
-            <div class="px-5 py-4">
-                <button onclick="openAddExpenseModal()" class="w-full py-2.5 px-4 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-medium rounded-xl shadow-md shadow-teal-600/20 hover:shadow-lg hover:shadow-teal-600/30 transition-all duration-200 flex items-center justify-center space-x-2">
-                    <i class="fa-solid fa-plus text-sm"></i>
-                    <span>Log Expense</span>
+            <!-- Quick Action CTAs -->
+            <div class="px-5 py-3 grid grid-cols-2 gap-2">
+                <button onclick="openAddExpenseModal()" class="py-2 px-3 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-medium text-xs rounded-xl shadow-md shadow-teal-600/20 transition-all flex items-center justify-center space-x-1.5">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>Expense</span>
+                </button>
+                <button onclick="openAddIncomeModal()" class="py-2 px-3 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 font-semibold text-xs rounded-xl border border-emerald-300/60 dark:border-emerald-700/60 transition-all flex items-center justify-center space-x-1.5">
+                    <i class="fa-solid fa-circle-arrow-down"></i>
+                    <span>Income</span>
                 </button>
             </div>
 
             <!-- Navigation Links -->
-            <nav class="flex-1 px-4 space-y-1.5 overflow-y-auto">
-                <a href="{{ url_for('dashboard') }}" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors {% if active_page == 'dashboard' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 shadow-sm border border-teal-200/50 dark:border-teal-800/50{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200{% endif %}">
-                    <i class="fa-solid fa-chart-pie w-5 text-center text-lg"></i>
+            <nav class="flex-1 px-4 space-y-1 overflow-y-auto">
+                <a href="{{ url_for('dashboard') }}" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-xs sm:text-sm transition-colors {% if active_page == 'dashboard' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 shadow-sm border border-teal-200/50 dark:border-teal-800/50{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200{% endif %}">
+                    <i class="fa-solid fa-chart-pie w-5 text-center text-base"></i>
                     <span>Dashboard</span>
                 </a>
 
-                <a href="{{ url_for('expenses_page') }}" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors {% if active_page == 'expenses' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 shadow-sm border border-teal-200/50 dark:border-teal-800/50{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200{% endif %}">
-                    <i class="fa-solid fa-receipt w-5 text-center text-lg"></i>
+                <a href="{{ url_for('income_page') }}" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-xs sm:text-sm transition-colors {% if active_page == 'income' %}bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 shadow-sm border border-emerald-200/50 dark:border-emerald-800/50{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200{% endif %}">
+                    <i class="fa-solid fa-money-bill-trend-up w-5 text-center text-base text-emerald-600"></i>
+                    <span>Income & Cash Flow</span>
+                </a>
+
+                <a href="{{ url_for('expenses_page') }}" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-xs sm:text-sm transition-colors {% if active_page == 'expenses' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 shadow-sm border border-teal-200/50 dark:border-teal-800/50{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200{% endif %}">
+                    <i class="fa-solid fa-receipt w-5 text-center text-base text-teal-600"></i>
                     <span>Expenses</span>
                 </a>
 
-                <a href="{{ url_for('reports_page') }}" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors {% if active_page == 'reports' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 shadow-sm border border-teal-200/50 dark:border-teal-800/50{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200{% endif %}">
-                    <i class="fa-solid fa-chart-column w-5 text-center text-lg"></i>
-                    <span>Reports & Charts</span>
-                </a>
-
-                <a href="{{ url_for('categories_page') }}" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors {% if active_page == 'categories' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 shadow-sm border border-teal-200/50 dark:border-teal-800/50{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200{% endif %}">
-                    <i class="fa-solid fa-tags w-5 text-center text-lg"></i>
-                    <span>Categories & Budgets</span>
-                </a>
-
-                <a href="{{ url_for('accounts_page') }}" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium transition-colors {% if active_page == 'accounts' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 shadow-sm border border-teal-200/50 dark:border-teal-800/50{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200{% endif %}">
-                    <i class="fa-solid fa-building-columns w-5 text-center text-lg"></i>
+                <a href="{{ url_for('accounts_page') }}" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-xs sm:text-sm transition-colors {% if active_page == 'accounts' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 shadow-sm border border-teal-200/50 dark:border-teal-800/50{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200{% endif %}">
+                    <i class="fa-solid fa-building-columns w-5 text-center text-base text-blue-500"></i>
                     <span>Bank Accounts</span>
                 </a>
 
-                <div class="pt-4 pb-2 px-3">
-                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Data Management</p>
+                <a href="{{ url_for('subscriptions_page') }}" class="flex items-center justify-between px-3.5 py-2.5 rounded-xl font-medium text-xs sm:text-sm transition-colors {% if active_page == 'subscriptions' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 shadow-sm border border-teal-200/50 dark:border-teal-800/50{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200{% endif %}">
+                    <div class="flex items-center space-x-3">
+                        <i class="fa-solid fa-repeat w-5 text-center text-base text-indigo-500"></i>
+                        <span>Subscriptions</span>
+                    </div>
+                    {% if upcoming_subs_count > 0 %}
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white">{{ upcoming_subs_count }}</span>
+                    {% endif %}
+                </a>
+
+                <a href="{{ url_for('goals_page') }}" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-xs sm:text-sm transition-colors {% if active_page == 'goals' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 shadow-sm border border-teal-200/50 dark:border-teal-800/50{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200{% endif %}">
+                    <i class="fa-solid fa-bullseye w-5 text-center text-base text-rose-500"></i>
+                    <span>Savings Goals</span>
+                </a>
+
+                <a href="{{ url_for('categories_page') }}" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-xs sm:text-sm transition-colors {% if active_page == 'categories' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 shadow-sm border border-teal-200/50 dark:border-teal-800/50{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200{% endif %}">
+                    <i class="fa-solid fa-tags w-5 text-center text-base text-amber-500"></i>
+                    <span>Categories & Budgets</span>
+                </a>
+
+                <a href="{{ url_for('reports_page') }}" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-xs sm:text-sm transition-colors {% if active_page == 'reports' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 shadow-sm border border-teal-200/50 dark:border-teal-800/50{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200{% endif %}">
+                    <i class="fa-solid fa-chart-column w-5 text-center text-base text-purple-500"></i>
+                    <span>Reports & Charts</span>
+                </a>
+
+                <a href="{{ url_for('statement_page') }}" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-xs sm:text-sm transition-colors {% if active_page == 'statement' %}bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 shadow-sm border border-teal-200/50 dark:border-teal-800/50{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200{% endif %}">
+                    <i class="fa-solid fa-file-invoice-dollar w-5 text-center text-base text-emerald-600"></i>
+                    <span>PDF Statement</span>
+                </a>
+
+                <div class="pt-3 pb-1 px-3">
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tools & Data</p>
                 </div>
 
-                <a href="{{ url_for('export_excel') }}" class="flex items-center space-x-3 px-3.5 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
+                <button onclick="openTransferModal()" class="w-full flex items-center space-x-3 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-teal-600 transition-colors text-left">
+                    <i class="fa-solid fa-arrow-right-arrow-left w-5 text-center text-teal-600"></i>
+                    <span>Transfer Money</span>
+                </button>
+
+                <a href="{{ url_for('export_excel') }}" class="flex items-center space-x-3 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-emerald-600 transition-colors">
                     <i class="fa-solid fa-file-excel w-5 text-center text-emerald-600"></i>
                     <span>Export to Excel</span>
                 </a>
 
-                <button onclick="openImportModal()" class="w-full flex items-center space-x-3 px-3.5 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-teal-600 dark:hover:text-teal-400 transition-colors text-left">
+                <button onclick="openImportModal()" class="w-full flex items-center space-x-3 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-teal-600 transition-colors text-left">
                     <i class="fa-solid fa-file-import w-5 text-center text-teal-600"></i>
                     <span>Import Excel</span>
                 </button>
@@ -206,6 +253,19 @@
                         <span class="hidden sm:inline">Excel</span>
                     </a>
 
+                    <!-- Quick Transfer Button -->
+                    <button onclick="openTransferModal()" class="hidden lg:inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400 border border-teal-200/60 dark:border-teal-800/40 hover:bg-teal-100 transition-colors shadow-sm" title="Transfer Between Accounts">
+                        <i class="fa-solid fa-arrow-right-arrow-left"></i>
+                        <span>Transfer</span>
+                    </button>
+
+                    <!-- Security & 2FA Button -->
+                    {% if current_user %}
+                    <button onclick="openTwoFactorModal()" class="p-2 rounded-xl text-slate-500 hover:text-teal-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="2FA Security Settings">
+                        <i class="fa-solid fa-shield-halved text-sm"></i>
+                    </button>
+                    {% endif %}
+
                     <!-- User Account / Logout -->
                     {% if current_user %}
                     <div class="hidden sm:flex items-center space-x-2 pl-1 border-l border-slate-200 dark:border-slate-800">
@@ -251,30 +311,30 @@
     <!-- ==================== MOBILE BOTTOM NAVIGATION BAR ==================== -->
     <nav class="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-around px-2 z-40 shadow-lg">
         <a href="{{ url_for('dashboard') }}" class="flex flex-col items-center justify-center flex-1 py-1 {% if active_page == 'dashboard' %}text-teal-600 dark:text-teal-400{% else %}text-slate-400 hover:text-slate-600 dark:hover:text-slate-200{% endif %}">
-            <i class="fa-solid fa-chart-pie text-lg mb-0.5"></i>
-            <span class="text-[10px] font-medium">Home</span>
+            <i class="fa-solid fa-chart-pie text-base mb-0.5"></i>
+            <span class="text-[9px] font-medium">Home</span>
         </a>
 
-        <a href="{{ url_for('expenses_page') }}" class="flex flex-col items-center justify-center flex-1 py-1 {% if active_page == 'expenses' %}text-teal-600 dark:text-teal-400{% else %}text-slate-400 hover:text-slate-600 dark:hover:text-slate-200{% endif %}">
-            <i class="fa-solid fa-receipt text-lg mb-0.5"></i>
-            <span class="text-[10px] font-medium">Expenses</span>
+        <a href="{{ url_for('income_page') }}" class="flex flex-col items-center justify-center flex-1 py-1 {% if active_page == 'income' %}text-emerald-600 dark:text-emerald-400{% else %}text-slate-400 hover:text-slate-600 dark:hover:text-slate-200{% endif %}">
+            <i class="fa-solid fa-money-bill-trend-up text-base mb-0.5"></i>
+            <span class="text-[9px] font-medium">Income</span>
         </a>
 
         <!-- Mobile Floating Quick-Add Button in Center -->
         <div class="relative -top-4 flex items-center justify-center">
-            <button onclick="openAddExpenseModal()" class="w-13 h-13 w-12 h-12 rounded-full bg-gradient-to-tr from-teal-600 to-emerald-500 text-white flex items-center justify-center shadow-lg shadow-teal-500/30 active:scale-95 transition-transform" aria-label="Add Expense">
+            <button onclick="openAddExpenseModal()" class="w-12 h-12 rounded-full bg-gradient-to-tr from-teal-600 to-emerald-500 text-white flex items-center justify-center shadow-lg shadow-teal-500/30 active:scale-95 transition-transform" aria-label="Add Expense">
                 <i class="fa-solid fa-plus text-xl"></i>
             </button>
         </div>
 
-        <a href="{{ url_for('accounts_page') }}" class="flex flex-col items-center justify-center flex-1 py-1 {% if active_page == 'accounts' %}text-teal-600 dark:text-teal-400{% else %}text-slate-400 hover:text-slate-600 dark:hover:text-slate-200{% endif %}">
-            <i class="fa-solid fa-building-columns text-lg mb-0.5"></i>
-            <span class="text-[10px] font-medium">Accounts</span>
+        <a href="{{ url_for('expenses_page') }}" class="flex flex-col items-center justify-center flex-1 py-1 {% if active_page == 'expenses' %}text-teal-600 dark:text-teal-400{% else %}text-slate-400 hover:text-slate-600 dark:hover:text-slate-200{% endif %}">
+            <i class="fa-solid fa-receipt text-base mb-0.5"></i>
+            <span class="text-[9px] font-medium">Expenses</span>
         </a>
 
-        <a href="{{ url_for('reports_page') }}" class="flex flex-col items-center justify-center flex-1 py-1 {% if active_page == 'reports' %}text-teal-600 dark:text-teal-400{% else %}text-slate-400 hover:text-slate-600 dark:hover:text-slate-200{% endif %}">
-            <i class="fa-solid fa-chart-column text-lg mb-0.5"></i>
-            <span class="text-[10px] font-medium">Reports</span>
+        <a href="{{ url_for('subscriptions_page') }}" class="flex flex-col items-center justify-center flex-1 py-1 {% if active_page == 'subscriptions' %}text-indigo-600 dark:text-indigo-400{% else %}text-slate-400 hover:text-slate-600 dark:hover:text-slate-200{% endif %}">
+            <i class="fa-solid fa-repeat text-base mb-0.5"></i>
+            <span class="text-[9px] font-medium">Bills</span>
         </a>
     </nav>
 
@@ -396,6 +456,29 @@
                 <div>
                     <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Notes (Optional)</label>
                     <input type="text" id="expenseNotes" name="notes" placeholder="e.g. Split with Alex, tax deductible" class="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 outline-none transition-all">
+                </div>
+
+                <!-- Receipt Attachment & Smart AI Scanner (v2.0) -->
+                <div class="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3 border border-slate-200/80 dark:border-slate-700/80 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Receipt Attachment</label>
+                        <button type="button" onclick="openReceiptScanner()" class="text-xs font-semibold text-teal-600 dark:text-teal-400 hover:text-teal-700 flex items-center space-x-1">
+                            <i class="fa-solid fa-camera"></i>
+                            <span>Scan Receipt (AI OCR)</span>
+                        </button>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <label class="flex-1 cursor-pointer">
+                            <input type="file" id="expenseReceipt" name="receipt" accept="image/*,application/pdf" class="hidden" onchange="previewReceiptFile(this)">
+                            <div class="flex items-center justify-center space-x-2 py-2 px-3 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 hover:border-teal-500 text-slate-600 dark:text-slate-400 text-xs transition-colors">
+                                <i class="fa-solid fa-paperclip text-teal-600"></i>
+                                <span id="receiptLabelText">Attach Image or PDF</span>
+                            </div>
+                        </label>
+                        <div id="receiptPreviewThumb" class="hidden w-10 h-10 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 relative group cursor-pointer" onclick="viewAttachedReceipt()">
+                            <img id="receiptThumbImg" src="" class="w-full h-full object-cover">
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Submit Button -->
@@ -531,6 +614,297 @@
                         <span id="saveBudgetBtnText">Save Monthly Budget</span>
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL: ADD / EDIT INCOME (v2.0) ==================== -->
+    <div id="incomeModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-slate-900/60 backdrop-blur-sm transition-opacity flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white dark:bg-slate-900 w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl border-t sm:border border-slate-200 dark:border-slate-800 overflow-hidden transform transition-all max-h-[92vh] sm:max-h-none flex flex-col">
+            <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-emerald-50/50 dark:bg-emerald-950/20">
+                <div class="flex items-center space-x-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                        <i class="fa-solid fa-money-bill-trend-up text-sm"></i>
+                    </div>
+                    <h3 id="incomeModalTitle" class="text-base font-bold text-slate-800 dark:text-slate-100">Log Income Stream</h3>
+                </div>
+                <button type="button" onclick="closeIncomeModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form id="incomeForm" onsubmit="handleIncomeSubmit(event)" class="p-6 space-y-4 overflow-y-auto flex-1">
+                <input type="hidden" id="incomeId" name="income_id" value="">
+                
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Amount (<span class="curr-sym">{{ currency.symbol }}</span>)</label>
+                    <div class="relative">
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-bold text-emerald-500">{{ currency.symbol }}</span>
+                        <input type="number" step="0.01" min="0.01" id="incomeAmount" name="amount" required placeholder="0.00" inputmode="decimal" class="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-2xl font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Source / Payer</label>
+                    <input type="text" id="incomeSource" name="source" required placeholder="e.g. Monthly Salary, Freelance Client, Dividend" class="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Deposit Into Account</label>
+                        <select id="incomeAccount" name="account_id" class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
+                            <option value="">-- No Account / Direct Cash --</option>
+                            {% for acc in bank_accounts_list %}
+                            <option value="{{ acc.id }}">{{ acc.name }} ({{ acc.account_type }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Date</label>
+                        <input type="date" id="incomeDate" name="date" required value="{{ current_date }}" class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Payment Method</label>
+                    <select id="incomePaymentMethod" name="payment_method" class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
+                        <option value="Bank Transfer">Bank Transfer / Direct Deposit</option>
+                        <option value="UPI / Digital Wallet">UPI / Digital Wallet</option>
+                        <option value="Cash">Cash</option>
+                        <option value="Check">Check</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Notes (Optional)</label>
+                    <input type="text" id="incomeNotes" name="notes" placeholder="e.g. Q4 bonus included" class="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
+                </div>
+
+                <div class="pt-3">
+                    <button type="submit" id="saveIncomeBtn" class="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold rounded-xl shadow-lg shadow-emerald-600/20 active:scale-[0.99] transition-all flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-check"></i>
+                        <span id="saveIncomeBtnText">Save Income</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL: TRANSFER MONEY (v2.0) ==================== -->
+    <div id="transferModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-slate-900/60 backdrop-blur-sm transition-opacity flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden transform transition-all">
+            <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div class="flex items-center space-x-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-teal-100 dark:bg-teal-900/50 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+                        <i class="fa-solid fa-arrow-right-arrow-left text-sm"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-slate-800 dark:text-slate-100">Transfer Funds</h3>
+                </div>
+                <button type="button" onclick="closeTransferModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form id="transferForm" onsubmit="handleTransferSubmit(event)" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Transfer Amount (<span class="curr-sym">{{ currency.symbol }}</span>)</label>
+                    <div class="relative">
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-bold text-slate-400">{{ currency.symbol }}</span>
+                        <input type="number" step="0.01" min="0.01" id="transferAmount" name="amount" required placeholder="0.00" class="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-2xl font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 outline-none transition-all">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">From Account (Source)</label>
+                    <select id="transferFromAccount" name="from_account_id" required class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 outline-none transition-all">
+                        {% for acc in bank_accounts_list %}
+                        <option value="{{ acc.id }}">{{ acc.name }} - Bal: {{ currency.symbol }}{{ "{:,.2f}".format(acc.current_balance) }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">To Account (Destination)</label>
+                    <select id="transferToAccount" name="to_account_id" required class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 outline-none transition-all">
+                        {% for acc in bank_accounts_list %}
+                        <option value="{{ acc.id }}" {% if loop.index == 2 %}selected{% endif %}>{{ acc.name }} - Bal: {{ currency.symbol }}{{ "{:,.2f}".format(acc.current_balance) }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Date</label>
+                    <input type="date" id="transferDate" name="date" required value="{{ current_date }}" class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 outline-none transition-all">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Notes (Optional)</label>
+                    <input type="text" id="transferNotes" name="notes" placeholder="e.g. Monthly savings transfer" class="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 outline-none transition-all">
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit" id="saveTransferBtn" class="w-full py-2.5 px-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-xl shadow-md transition-all flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-arrow-right-arrow-left"></i>
+                        <span>Execute Transfer</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL: 2FA SECURITY SETTINGS (v2.0) ==================== -->
+    <div id="twoFactorModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-slate-900/60 backdrop-blur-sm transition-opacity flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden transform transition-all">
+            <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div class="flex items-center space-x-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-teal-100 dark:bg-teal-900/50 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+                        <i class="fa-solid fa-shield-halved text-sm"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-slate-800 dark:text-slate-100">Two-Factor Authentication</h3>
+                        <p class="text-[11px] text-slate-400">TOTP (Google Authenticator / Authy)</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeTwoFactorModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div id="twoFactorStatusBanner" class="p-3 rounded-xl text-xs font-medium flex items-center justify-between">
+                    <!-- Populated dynamically: Active or Inactive -->
+                </div>
+
+                <div id="twoFactorSetupStep" class="hidden space-y-3">
+                    <p class="text-xs text-slate-600 dark:text-slate-400">
+                        1. Scan this QR code in Google Authenticator, Microsoft Authenticator, or 1Password:
+                    </p>
+                    
+                    <div class="flex justify-center p-3 bg-white rounded-xl shadow-inner border border-slate-200">
+                        <div id="twoFactorQrCodeCanvas" class="w-44 h-44 flex items-center justify-center"></div>
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-400 mb-1">Or enter manual key:</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="text" id="twoFactorSecretText" readonly class="w-full font-mono text-xs px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
+                            <button type="button" onclick="copyTwoFactorSecret()" class="px-3 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-xs rounded-lg font-semibold">Copy</button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">2. Enter 6-digit confirmation code:</label>
+                        <input type="text" id="twoFactorVerifyInput" maxlength="6" placeholder="000000" inputmode="numeric" class="w-full text-center tracking-widest text-xl font-bold px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none">
+                    </div>
+
+                    <button type="button" onclick="confirmEnable2FA()" class="w-full py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs rounded-xl shadow-md transition-all">
+                        Verify & Activate 2FA
+                    </button>
+                </div>
+
+                <div id="twoFactorDisableStep" class="hidden space-y-3">
+                    <p class="text-xs text-slate-600 dark:text-slate-400">
+                        Two-Factor Authentication is currently protecting your account on every login.
+                    </p>
+                    <button type="button" onclick="disable2FA()" class="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs rounded-xl shadow-md transition-all">
+                        Disable Two-Factor Authentication
+                    </button>
+                </div>
+
+                <div id="twoFactorInitStep" class="hidden">
+                    <button type="button" onclick="startSetup2FA()" class="w-full py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs rounded-xl shadow-md transition-all flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-qrcode"></i>
+                        <span>Set Up Authenticator App</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL: RECEIPT OCR SMART SCANNER (v2.0) ==================== -->
+    <div id="ocrScannerModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-slate-900/60 backdrop-blur-sm transition-opacity flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden transform transition-all">
+            <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div class="flex items-center space-x-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-teal-100 dark:bg-teal-900/50 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+                        <i class="fa-solid fa-wand-magic-sparkles text-sm"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-slate-800 dark:text-slate-100">Smart Receipt Scanner</h3>
+                        <p class="text-[11px] text-slate-400">Client-Side AI OCR via Tesseract.js</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeReceiptScanner()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div id="ocrUploadZone" onclick="document.getElementById('ocrFileInput').click()" class="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-teal-500 rounded-2xl p-6 text-center cursor-pointer transition-colors bg-slate-50/50 dark:bg-slate-800/30">
+                    <i class="fa-solid fa-camera text-3xl text-teal-600 mb-2"></i>
+                    <p class="text-xs font-semibold text-slate-700 dark:text-slate-300">Take a photo or upload receipt image</p>
+                    <p class="text-[11px] text-slate-400 mt-1">Supports JPG, PNG, WEBP</p>
+                    <input type="file" id="ocrFileInput" accept="image/*" capture="environment" class="hidden" onchange="runReceiptOcr(this)">
+                </div>
+
+                <!-- Progress Indicator -->
+                <div id="ocrProgressBox" class="hidden space-y-2">
+                    <div class="flex items-center justify-between text-xs">
+                        <span id="ocrStatusText" class="text-slate-600 dark:text-slate-400 font-medium">Scanning receipt...</span>
+                        <span id="ocrPercentText" class="font-bold text-teal-600">0%</span>
+                    </div>
+                    <div class="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                        <div id="ocrProgressBar" class="h-full bg-gradient-to-r from-teal-500 to-emerald-500 transition-all duration-200" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Detected Data Card -->
+                <div id="ocrResultsBox" class="hidden bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800 rounded-xl p-3.5 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-teal-800 dark:text-teal-300 flex items-center space-x-1.5">
+                            <i class="fa-solid fa-circle-check text-teal-600"></i>
+                            <span>Receipt Data Detected</span>
+                        </span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div class="bg-white/80 dark:bg-slate-800/80 p-2 rounded-lg">
+                            <span class="text-[10px] text-slate-400 block">Amount</span>
+                            <span id="ocrDetectedAmount" class="font-extrabold text-slate-900 dark:text-white">$0.00</span>
+                        </div>
+                        <div class="bg-white/80 dark:bg-slate-800/80 p-2 rounded-lg">
+                            <span class="text-[10px] text-slate-400 block">Date</span>
+                            <span id="ocrDetectedDate" class="font-extrabold text-slate-900 dark:text-white">-</span>
+                        </div>
+                    </div>
+                    <div class="bg-white/80 dark:bg-slate-800/80 p-2 rounded-lg text-xs">
+                        <span class="text-[10px] text-slate-400 block">Merchant / Details</span>
+                        <span id="ocrDetectedMerchant" class="font-semibold text-slate-800 dark:text-slate-200">-</span>
+                    </div>
+                    <button type="button" onclick="applyOcrToExpense()" class="w-full py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center space-x-1.5">
+                        <i class="fa-solid fa-arrow-down-to-bracket"></i>
+                        <span>Apply to Expense Form</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL: RECEIPT LIGHTBOX PREVIEW (v2.0) ==================== -->
+    <div id="receiptLightboxModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-slate-950/80 backdrop-blur-md transition-opacity flex items-center justify-center p-4" onclick="closeReceiptLightbox()">
+        <div class="relative max-w-2xl w-full bg-slate-900 rounded-2xl overflow-hidden shadow-2xl p-2" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between p-3 border-b border-slate-800 text-white">
+                <span class="text-xs font-bold flex items-center space-x-1.5">
+                    <i class="fa-solid fa-paperclip text-teal-400"></i>
+                    <span>Attached Receipt Preview</span>
+                </span>
+                <button type="button" onclick="closeReceiptLightbox()" class="text-slate-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div class="p-4 flex items-center justify-center max-h-[75vh] overflow-auto">
+                <img id="lightboxImg" src="" class="max-w-full max-h-[70vh] object-contain rounded-lg">
             </div>
         </div>
     </div>

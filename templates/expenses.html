@@ -151,7 +151,15 @@
                             </span>
                         </td>
                         <td class="py-3.5 px-5">
-                            <p class="font-medium text-slate-800 dark:text-slate-200">{{ exp.description }}</p>
+                            <div class="flex items-center space-x-2">
+                                <p class="font-medium text-slate-800 dark:text-slate-200">{{ exp.description }}</p>
+                                {% if exp.receipt_filename %}
+                                <button type="button" onclick="viewReceiptImage('{{ url_for('static', filename='uploads/receipts/' + exp.receipt_filename) }}')" class="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 border border-teal-200/80 dark:border-teal-800 hover:bg-teal-100 transition-colors" title="View Attached Receipt">
+                                    <i class="fa-solid fa-paperclip"></i>
+                                    <span>Receipt</span>
+                                </button>
+                                {% endif %}
+                            </div>
                             {% if exp.notes %}
                             <p class="text-xs text-slate-400 mt-0.5">{{ exp.notes }}</p>
                             {% endif %}

@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}Monthly Financial Statement - {{ month_name }}{% endblock %}
+{% block header_title %}Monthly Statement{% endblock %}
+
+{% block content %}
+<!-- Print Action Bar (Hidden during printing) -->
+<div class="print:hidden bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+    <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-teal-100 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-file-invoice-dollar"></i>
+        </div>
+        <div>
+            <h3 class="text-base font-bold text-slate-900 dark:text-white">Monthly Financial Statement</h3>
+            <p class="text-xs text-slate-400">Statement period: <span class="font-semibold text-slate-700 dark:text-slate-300">{{ month_name }}</span></p>
+        </div>
+    </div>
+
+    <div class="flex items-center space-x-3">
+        <!-- Month Selector Form -->
+        <form method="GET" class="inline-flex items-center">
+            <select name="month" onchange="this.form.submit()" class="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer">
+                {% for m in available_months %}
+                <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>{{ m }}</option>
+                {% endfor %}
+            </select>
+        </form>
+
+        <button onclick="window.print()" class="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center space-x-2 active:scale-95">
+            <i class="fa-solid fa-print"></i>
+            <span>Print / Save as PDF</span>
+        </button>
+    </div>
+</div>
+
+<!-- ==================== FORMAL PRINTABLE STATEMENT CONTAINER ==================== -->
+<div class="bg-white dark:bg-slate-900 print:bg-white print:text-black rounded-3xl border border-slate-200 dark:border-slate-800 print:border-none shadow-lg print:shadow-none p-6 sm:p-10 space-y-8">
+    
+    <!-- Statement Letterhead -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 print:border-slate-300 pb-6">
+        <div class="flex items-center space-x-3.5">
+            <div class="w-12 h-12 rounded-2xl bg-teal-600 text-white flex items-center justify-center text-xl shadow-sm print:border print:border-slate-300">
+                <i class="fa-solid fa-wallet"></i>
+            </div>
+            <div>
+                <h1 class="text-2xl font-black tracking-tight text-slate-900 dark:text-white print:text-black">FinanceFlow</h1>
+                <p class="text-xs text-slate-400 print:text-slate-600 font-semibold uppercase tracking-wider">Statement of Financial Activity</p>
+            </div>
+        </div>
+
+        <div class="text-left sm:text-right text-xs space-y-1">
+            <p><span class="text-slate-400 print:text-slate-500 font-medium">Account Holder:</span> <span class="font-bold text-slate-800 dark:text-slate-200 print:text-black">{{ current_user.username }}</span></p>
+            <p><span class="text-slate-400 print:text-slate-500 font-medium">Statement Period:</span> <span class="font-bold text-teal-600 dark:text-teal-400 print:text-black">{{ month_name }}</span></p>
+            <p><span class="text-slate-400 print:text-slate-500 font-medium">Currency:</span> <span class="font-bold">{{ currency.code }} ({{ currency.symbol }})</span></p>
+        </div>
+    </div>
+
+    <!-- Executive Cash Flow Summary Cards -->
+    <div>
+        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 print:text-slate-600 mb-3">Executive Summary</h2>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 print:gap-2">
+            <div class="bg-slate-50 dark:bg-slate-800/60 print:bg-slate-50 p-4 rounded-xl border border-slate-200/80 dark:border-slate-700/80 print:border-slate-300">
+                <span class="text-[10px] font-bold uppercase text-slate-400 print:text-slate-600 block mb-1">Total Inflows</span>
+                <p class="text-xl font-black text-emerald-600 print:text-black">+{{ currency.symbol }}{{ "{:,.2f}".format(cash_flow.total_income) }}</p>
+                <span class="text-[10px] text-slate-400">{{ cash_flow.income_count }} transactions</span>
+            </div>
+
+            <div class="bg-slate-50 dark:bg-slate-800/60 print:bg-slate-50 p-4 rounded-xl border border-slate-200/80 dark:border-slate-700/80 print:border-slate-300">
+                <span class="text-[10px] font-bold uppercase text-slate-400 print:text-slate-600 block mb-1">Total Outflows</span>
+                <p class="text-xl font-black text-rose-600 print:text-black">-{{ currency.symbol }}{{ "{:,.2f}".format(cash_flow.total_expenses) }}</p>
+                <span class="text-[10px] text-slate-400">{{ cash_flow.expense_count }} expenses</span>
+            </div>
+
+            <div class="bg-slate-50 dark:bg-slate-800/60 print:bg-slate-50 p-4 rounded-xl border border-slate-200/80 dark:border-slate-700/80 print:border-slate-300">
+                <span class="text-[10px] font-bold uppercase text-slate-400 print:text-slate-600 block mb-1">Net Cash Surplus</span>
+                <p class="text-xl font-black {% if cash_flow.net_cash_flow >= 0 %}text-teal-600{% else %}text-rose-600{% endif %} print:text-black">
+                    {% if cash_flow.net_cash_flow >= 0 %}+{% endif %}{{ currency.symbol }}{{ "{:,.2f}".format(cash_flow.net_cash_flow) }}
+                </p>
+                <span class="text-[10px] text-slate-400">Net monthly retention</span>
+            </div>
+
+            <div class="bg-slate-50 dark:bg-slate-800/60 print:bg-slate-50 p-4 rounded-xl border border-slate-200/80 dark:border-slate-700/80 print:border-slate-300">
+                <span class="text-[10px] font-bold uppercase text-slate-400 print:text-slate-600 block mb-1">Savings Rate</span>
+                <p class="text-xl font-black text-indigo-600 print:text-black">{{ cash_flow.savings_rate }}%</p>
+                <span class="text-[10px] text-slate-400">Of logged income</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bank Accounts Summary -->
+    <div>
+        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 print:text-slate-600 mb-3">Bank Accounts Status</h2>
+        <div class="overflow-x-auto border border-slate-200 dark:border-slate-800 print:border-slate-300 rounded-xl">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50 dark:bg-slate-800 print:bg-slate-100 font-bold uppercase text-[10px] text-slate-400 print:text-slate-600">
+                    <tr>
+                        <th class="py-2.5 px-4">Account Name</th>
+                        <th class="py-2.5 px-4">Type</th>
+                        <th class="py-2.5 px-4 text-right">Inflows</th>
+                        <th class="py-2.5 px-4 text-right">Outflows</th>
+                        <th class="py-2.5 px-4 text-right">Current Balance</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-800 print:divide-slate-200">
+                    {% for acc in accounts %}
+                    <tr>
+                        <td class="py-2.5 px-4 font-bold text-slate-800 dark:text-slate-200 print:text-black">{{ acc.name }}</td>
+                        <td class="py-2.5 px-4 text-slate-500">{{ acc.account_type }}</td>
+                        <td class="py-2.5 px-4 text-right text-emerald-600 print:text-black">+{{ currency.symbol }}{{ "{:,.2f}".format(acc.total_income) }}</td>
+                        <td class="py-2.5 px-4 text-right text-rose-600 print:text-black">-{{ currency.symbol }}{{ "{:,.2f}".format(acc.total_spent) }}</td>
+                        <td class="py-2.5 px-4 text-right font-extrabold text-slate-900 dark:text-white print:text-black">{{ currency.symbol }}{{ "{:,.2f}".format(acc.current_balance) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Category Spending Breakdown -->
+    <div>
+        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 print:text-slate-600 mb-3">Category Spending Breakdown</h2>
+        <div class="overflow-x-auto border border-slate-200 dark:border-slate-800 print:border-slate-300 rounded-xl">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50 dark:bg-slate-800 print:bg-slate-100 font-bold uppercase text-[10px] text-slate-400 print:text-slate-600">
+                    <tr>
+                        <th class="py-2.5 px-4">Category</th>
+                        <th class="py-2.5 px-4 text-right">Monthly Budget</th>
+                        <th class="py-2.5 px-4 text-right">Actual Spent</th>
+                        <th class="py-2.5 px-4 text-right">Budget Utilization</th>
+                        <th class="py-2.5 px-4 text-right">Variance</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-800 print:divide-slate-200">
+                    {% for cat in categories %}
+                    {% if cat.spent > 0 or cat.monthly_budget > 0 %}
+                    <tr>
+                        <td class="py-2 px-4 font-bold text-slate-800 dark:text-slate-200 print:text-black">{{ cat.name }}</td>
+                        <td class="py-2 px-4 text-right text-slate-500">{{ currency.symbol }}{{ "{:,.2f}".format(cat.monthly_budget) }}</td>
+                        <td class="py-2 px-4 text-right font-extrabold text-slate-900 dark:text-white print:text-black">{{ currency.symbol }}{{ "{:,.2f}".format(cat.spent) }}</td>
+                        <td class="py-2 px-4 text-right">
+                            <span class="font-bold {% if cat.budget_utilization > 100 %}text-rose-600{% elif cat.budget_utilization > 80 %}text-amber-500{% else %}text-emerald-600{% endif %}">
+                                {{ cat.budget_utilization }}%
+                            </span>
+                        </td>
+                        <td class="py-2 px-4 text-right font-semibold {% if cat.remaining_budget < 0 %}text-rose-600{% else %}text-slate-500{% endif %}">
+                            {{ currency.symbol }}{{ "{:,.2f}".format(cat.remaining_budget) }}
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Itemized Expenses Table -->
+    <div>
+        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 print:text-slate-600 mb-3">Itemized Transactions ({{ expenses|length }})</h2>
+        <div class="overflow-x-auto border border-slate-200 dark:border-slate-800 print:border-slate-300 rounded-xl">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50 dark:bg-slate-800 print:bg-slate-100 font-bold uppercase text-[10px] text-slate-400 print:text-slate-600">
+                    <tr>
+                        <th class="py-2.5 px-4">Date</th>
+                        <th class="py-2.5 px-4">Description</th>
+                        <th class="py-2.5 px-4">Category</th>
+                        <th class="py-2.5 px-4">Payment Method</th>
+                        <th class="py-2.5 px-4">Account</th>
+                        <th class="py-2.5 px-4 text-right">Amount</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-800 print:divide-slate-200">
+                    {% for exp in expenses %}
+                    <tr>
+                        <td class="py-2 px-4 font-mono text-[11px] text-slate-500">{{ exp.date }}</td>
+                        <td class="py-2 px-4 font-bold text-slate-800 dark:text-slate-200 print:text-black">{{ exp.description }}</td>
+                        <td class="py-2 px-4 text-slate-600 dark:text-slate-400">{{ exp.category_name }}</td>
+                        <td class="py-2 px-4 text-slate-500">{{ exp.payment_method }}</td>
+                        <td class="py-2 px-4 text-slate-500">{{ exp.account_name or "Cash" }}</td>
+                        <td class="py-2 px-4 text-right font-extrabold text-slate-900 dark:text-white print:text-black">{{ currency.symbol }}{{ "{:,.2f}".format(exp.amount) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Statement Footer Signature / Note -->
+    <div class="pt-6 border-t border-slate-200 dark:border-slate-800 print:border-slate-300 flex items-center justify-between text-xs text-slate-400 print:text-slate-500">
+        <p>Generated automatically by FinanceFlow v2.0</p>
+        <p>Document verified & authenticated for personal recordkeeping</p>
+    </div>
+</div>
+{% endblock %}
