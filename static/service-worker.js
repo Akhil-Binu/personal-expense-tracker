@@ -1,5 +1,5 @@
-// FinanceFlow Service Worker v2.0
-const CACHE_NAME = 'financeflow-v2.0.0';
+// FinanceFlow Service Worker v2.0.1
+const CACHE_NAME = 'financeflow-v2.0.1';
 const STATIC_ASSETS = [
   '/',
   '/static/css/style.css',

@@ -18,7 +18,7 @@ import analytics_service
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-__version__ = "2.0.0"
+__version__ = "2.0.1"
 
 UPLOAD_FOLDER = os.path.join(app.root_path, "static", "uploads", "receipts")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)

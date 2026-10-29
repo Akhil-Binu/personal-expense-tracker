@@ -386,7 +386,7 @@ class ExpenseTrackerTestCase(unittest.TestCase):
         # Service worker
         res_sw = self.client.get("/service-worker.js")
         self.assertEqual(res_sw.status_code, 200)
-        self.assertIn(b"financeflow-v2.0.0", res_sw.data)
+        self.assertIn(b"financeflow-v2.0.1", res_sw.data)
 
     def test_income_and_transfers_api(self):
         """Test Income CRUD and Inter-Account Transfers."""
