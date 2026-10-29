@@ -100,7 +100,7 @@ def generate_smart_insights(user_id=1, month_str=None):
                     
         # Overall budget burn rate if no specific alert triggered
         if velocity_alerts == 0 and categories:
-            total_budget = sum(c["monthly_budget"] for c in categories)
+            total_budget = database.get_user_monthly_budget(user_id=user_id)
             total_spent = sum(c["spent"] for c in categories)
             if total_budget > 0:
                 utilization = round((total_spent / total_budget) * 100, 1)
@@ -190,7 +190,7 @@ def calculate_budget_velocity(user_id=1, month_str=None):
     month_pct_elapsed = round((days_passed / days_in_month) * 100, 1)
 
     categories = database.get_category_breakdown(month_str=month_str, user_id=user_id)
-    total_budget = sum(c["monthly_budget"] for c in categories)
+    total_budget = database.get_user_monthly_budget(user_id=user_id)
     total_spent = sum(c["spent"] for c in categories)
 
     daily_run_rate = round(total_spent / days_passed, 2)

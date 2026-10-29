@@ -566,32 +566,49 @@
             <div class="p-6 space-y-5 overflow-y-auto flex-1">
                 <!-- Target Total Monthly Budget Box -->
                 <div class="bg-gradient-to-br from-teal-500/10 via-emerald-500/5 to-slate-50 dark:from-teal-950/40 dark:via-emerald-950/20 dark:to-slate-800/40 rounded-2xl p-4 border border-teal-500/20">
-                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
-                        Target Total Monthly Budget (<span class="curr-sym">{{ currency.symbol }}</span>)
-                    </label>
+                    <div class="flex items-center justify-between mb-1.5">
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                            Overall Total Monthly Budget (<span class="curr-sym">{{ currency.symbol }}</span>)
+                        </label>
+                        <span class="text-[11px] font-semibold text-teal-600 dark:text-teal-400">Spending Ceiling</span>
+                    </div>
                     <div class="relative">
                         <span class="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-black text-slate-400">{{ currency.symbol }}</span>
-                        <input type="number" step="10" min="0" id="modalTargetBudgetInput" placeholder="0.00" class="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-2xl font-black text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 outline-none transition-all">
+                        <input type="number" step="10" min="0" id="modalTargetBudgetInput" oninput="onTargetBudgetInputChange()" placeholder="0.00" class="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-2xl font-black text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 outline-none transition-all">
                     </div>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">
+                        Set any amount as your overall monthly budget. Category limits below are optional.
+                    </p>
                     
                     <!-- Quick Distribute Action Chips -->
-                    <div class="flex flex-wrap items-center gap-2 mt-3 pt-2 border-t border-teal-500/15">
-                        <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Quick Distribute:</span>
+                    <div class="flex flex-wrap items-center gap-1.5 mt-3 pt-2.5 border-t border-teal-500/15">
+                        <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400 mr-1">Quick Tools:</span>
                         <button type="button" onclick="distributeBudgetProportionally()" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-teal-600 hover:bg-teal-700 text-white shadow-sm transition-all flex items-center space-x-1" title="Scale all categories keeping their current % ratio">
                             <i class="fa-solid fa-chart-pie text-[10px]"></i>
-                            <span>Auto-Scale by %</span>
+                            <span>Scale by %</span>
                         </button>
                         <button type="button" onclick="distributeBudgetEvenly()" class="px-2.5 py-1 text-xs font-medium rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center space-x-1">
                             <i class="fa-solid fa-divide text-[10px]"></i>
                             <span>Split Evenly</span>
+                        </button>
+                        <button type="button" onclick="uncapAllCategoryBudgets()" class="px-2.5 py-1 text-xs font-medium rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center space-x-1" title="Clear all category limits (set to Uncapped)">
+                            <i class="fa-solid fa-infinity text-[10px] text-teal-500"></i>
+                            <span>Uncap All</span>
+                        </button>
+                        <button type="button" onclick="matchCategorySum()" class="px-2.5 py-1 text-xs font-medium rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center space-x-1" title="Set total budget to match category sum">
+                            <i class="fa-solid fa-equals text-[10px]"></i>
+                            <span>Match Sum</span>
                         </button>
                     </div>
                 </div>
 
                 <!-- Category Limits List Header -->
                 <div>
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Category Spending Limits</span>
+                    <div class="flex items-center justify-between mb-1">
+                        <div>
+                            <span class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Category Spending Limits</span>
+                            <span class="text-[11px] text-slate-400 font-normal ml-1.5">(Optional &bull; 0.00 = Uncapped)</span>
+                        </div>
                         <span class="text-xs font-bold text-slate-700 dark:text-slate-300">
                             Sum: <span id="modalLiveTotalSum" class="text-teal-600 dark:text-teal-400">{{ currency.symbol }}0.00</span>
                         </span>

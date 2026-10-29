@@ -872,13 +872,60 @@ def update_monthly_budgets(category_budgets, user_id=1):
         conn.commit()
         return updated_count
 
-def set_total_monthly_budget(new_total, user_id=1):
+def get_explicit_monthly_budget(user_id=1):
     """
-    Sets an overall monthly budget and proportionally distributes it
-    across existing categories for the user.
+    Returns the user's custom standalone monthly budget ceiling from settings,
+    or None if not explicitly configured or set to 0.
+    """
+    user_id = user_id or 1
+    val = get_setting(f"user_{user_id}_total_monthly_budget")
+    if val is not None and str(val).strip() != "":
+        try:
+            amount = float(val)
+            return amount if amount > 0 else None
+        except (ValueError, TypeError):
+            return None
+    return None
+
+def set_user_monthly_budget(user_id=1, amount=0.0):
+    """
+    Stores an explicit total monthly budget for the user.
+    If amount is 0 or negative, clears/sets to 0 to fallback to category sum.
+    """
+    user_id = user_id or 1
+    amount = max(0.0, float(amount or 0.0))
+    set_setting(f"user_{user_id}_total_monthly_budget", str(round(amount, 2)))
+    return amount
+
+def get_user_monthly_budget(user_id=1):
+    """
+    Returns the active monthly budget ceiling for the user.
+    If an explicit total monthly budget is set (> 0), that value is returned.
+    Otherwise, sums the budgets of all user categories.
+    """
+    user_id = user_id or 1
+    explicit = get_explicit_monthly_budget(user_id)
+    if explicit is not None and explicit > 0:
+        return round(float(explicit), 2)
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COALESCE(SUM(monthly_budget), 0) as total FROM categories WHERE user_id = ?", (user_id,))
+        row = cursor.fetchone()
+        return round(float(row["total"]), 2) if row else 0.0
+
+def set_total_monthly_budget(new_total, user_id=1, distribute_to_categories=True):
+    """
+    Sets an overall monthly budget. If distribute_to_categories is True,
+    proportionally distributes it across existing categories for the user.
+    Always records the explicit overall budget.
     """
     user_id = user_id or 1
     new_total = max(0.0, float(new_total or 0.0))
+    set_user_monthly_budget(user_id, new_total)
+
+    if not distribute_to_categories:
+        return 0
+
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id, monthly_budget FROM categories WHERE user_id = ? ORDER BY id ASC", (user_id,))
@@ -1101,9 +1148,13 @@ def get_monthly_metrics(month_str=None, user_id=1):
         """, (prev_month_str, user_id))
         prev_month_spend = cursor.fetchone()["total"]
         
-        # Total Monthly Budget
-        cursor.execute("SELECT COALESCE(SUM(monthly_budget), 0) as total_budget FROM categories WHERE user_id = ?", (user_id,))
-        total_budget = cursor.fetchone()["total_budget"]
+        # Total Monthly Budget (explicit standalone monthly budget if configured, else sum of categories)
+        explicit_budget = get_explicit_monthly_budget(user_id)
+        if explicit_budget is not None and explicit_budget > 0:
+            total_budget = explicit_budget
+        else:
+            cursor.execute("SELECT COALESCE(SUM(monthly_budget), 0) as total_budget FROM categories WHERE user_id = ?", (user_id,))
+            total_budget = cursor.fetchone()["total_budget"]
         
         # Top Category this month
         cursor.execute("""
@@ -1166,6 +1217,7 @@ def get_category_breakdown(month_str=None, user_id=1):
             r["percentage_of_total"] = round((r["spent"] / total_spent * 100), 1) if total_spent > 0 else 0.0
             r["budget_utilization"] = round((r["spent"] / r["monthly_budget"] * 100), 1) if r["monthly_budget"] > 0 else 0.0
             r["remaining_budget"] = round(r["monthly_budget"] - r["spent"], 2)
+            r["has_budget"] = (r["monthly_budget"] > 0)
         return rows
 
 def get_daily_spending_trend(month_str=None, user_id=1):

@@ -386,7 +386,7 @@ class ExpenseTrackerTestCase(unittest.TestCase):
         # Service worker
         res_sw = self.client.get("/service-worker.js")
         self.assertEqual(res_sw.status_code, 200)
-        self.assertIn(b"financeflow-v2.0.1", res_sw.data)
+        self.assertIn(b"financeflow-v2.0.2", res_sw.data)
 
     def test_income_and_transfers_api(self):
         """Test Income CRUD and Inter-Account Transfers."""
@@ -681,6 +681,89 @@ class ExpenseTrackerTestCase(unittest.TestCase):
         res_del = self.client.delete(f"/api/debt/{loan_id}")
         self.assertEqual(res_del.status_code, 200)
         self.assertIsNone(database.get_debt_by_id(loan_id, user_id=1))
+
+
+    def test_optional_category_spending_limit_and_total_monthly_budget(self):
+        """Test that category spending limits are optional (uncapped) and total monthly budget can be set to any arbitrary amount."""
+        # 1. Create a category with no spending limit (optional / blank / 0.0)
+        res_cat = self.client.post("/api/category", json={
+            "name": "Hobbies & Leisure",
+            "icon": "gamepad",
+            "color": "#8B5CF6",
+            "monthly_budget": ""  # Omitted / blank spending limit
+        })
+        self.assertEqual(res_cat.status_code, 200)
+        cat_data = res_cat.get_json()
+        self.assertTrue(cat_data["success"])
+        new_cat_id = cat_data["id"]
+
+        cat = database.get_category_by_id(new_cat_id, user_id=1)
+        self.assertIsNotNone(cat)
+        self.assertEqual(cat["monthly_budget"], 0.0)
+
+        # 2. Verify categories page renders Uncapped label for this category
+        res_page = self.client.get("/categories")
+        self.assertEqual(res_page.status_code, 200)
+        self.assertIn(b"Hobbies &amp; Leisure", res_page.data)
+        self.assertIn(b"Uncapped", res_page.data)
+        self.assertIn(b"No Limit Set (Optional)", res_page.data)
+
+        # 3. Set an arbitrary standalone overall monthly budget (e.g. 4,750.00)
+        res_budget = self.client.post("/api/budget", json={
+            "total_budget": 4750.00
+        })
+        self.assertEqual(res_budget.status_code, 200)
+        b_data = res_budget.get_json()
+        self.assertTrue(b_data["success"])
+        self.assertEqual(b_data["total_budget"], 4750.00)
+        self.assertEqual(b_data["explicit_budget"], 4750.00)
+
+        # 4. Verify database and metrics prioritize the explicit overall monthly budget
+        self.assertEqual(database.get_user_monthly_budget(user_id=1), 4750.00)
+        self.assertEqual(database.get_explicit_monthly_budget(user_id=1), 4750.00)
+
+        metrics = database.get_monthly_metrics(user_id=1)
+        self.assertEqual(metrics["total_budget"], 4750.00)
+
+        # 5. Check GET /api/budget returns the custom total budget
+        res_get_b = self.client.get("/api/budget")
+        self.assertEqual(res_get_b.status_code, 200)
+        get_b_data = res_get_b.get_json()
+        self.assertEqual(get_b_data["total_budget"], 4750.00)
+        self.assertEqual(get_b_data["explicit_budget"], 4750.00)
+
+        # 6. Verify Dashboard and Categories page reflect the overall budget
+        res_dash = self.client.get("/")
+        self.assertEqual(res_dash.status_code, 200)
+        self.assertIn(b"4750.00", res_dash.data)
+
+        res_cat_page = self.client.get("/categories")
+        self.assertEqual(res_cat_page.status_code, 200)
+        self.assertIn(b"4750.00", res_cat_page.data)
+        self.assertIn(b"Custom overall monthly budget", res_cat_page.data)
+
+        # 7. Update category with a limit, then update back to 0.0 (uncapped)
+        res_upd1 = self.client.put(f"/api/category/{new_cat_id}", json={
+            "name": "Hobbies & Leisure",
+            "icon": "gamepad",
+            "color": "#8B5CF6",
+            "monthly_budget": 150.00
+        })
+        self.assertEqual(res_upd1.status_code, 200)
+        self.assertEqual(database.get_category_by_id(new_cat_id, user_id=1)["monthly_budget"], 150.00)
+
+        res_upd2 = self.client.put(f"/api/category/{new_cat_id}", json={
+            "name": "Hobbies & Leisure",
+            "icon": "gamepad",
+            "color": "#8B5CF6",
+            "monthly_budget": 0.0  # Clear back to uncapped
+        })
+        self.assertEqual(res_upd2.status_code, 200)
+        self.assertEqual(database.get_category_by_id(new_cat_id, user_id=1)["monthly_budget"], 0.0)
+
+        # 8. Clean up category
+        res_del = self.client.delete(f"/api/category/{new_cat_id}/delete")
+        self.assertEqual(res_del.status_code, 200)
 
 
 if __name__ == "__main__":

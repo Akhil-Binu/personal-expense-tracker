@@ -276,10 +276,14 @@ Navigate to `/statement` to view an executive statement for any custom date rang
 
 ## 🎯 Interactive Monthly Budget Editor
 
-- **Dashboard KPI Editing**: Click **"Edit"** on the Monthly Budget card to modify targets on the fly.
-- **Auto-Scale Proportionally**: 1-click button adjusts all category spending limits proportionally to match a new total target.
-- **Split Evenly**: Distributes your overall monthly budget equally across all categories.
-- **Per-Category Controls**: Direct numeric inputs with live recalculation of percentage shares.
+- **Arbitrary Overall Monthly Budget Ceiling**: Set any amount as your overall monthly spending limit (e.g. $4,000/month) directly, without requiring allocation into specific categories.
+- **Optional Category Limits (Uncapped / Flexible)**: Category spending limits are completely optional. Categories set to $0.00 or left blank are treated as Uncapped/Flexible and won't trigger false over-budget warnings.
+- **Quick Tool Suite**:
+  - **Auto-Scale by %**: Proportionally scales existing category limits to match the target ceiling.
+  - **Split Evenly**: Divides the target ceiling equally across all categories.
+  - **Uncap All**: 1-click clears all individual limits so spending is tracked purely against your total monthly budget.
+  - **Match Sum**: Automatically sets your overall budget to match the exact sum of all category limits.
+- **Dashboard & Category Views**: All KPIs, remaining buffers, pace meters, and reports immediately update to reflect your overall budget ceiling.
 
 ---
 

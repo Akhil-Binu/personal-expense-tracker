@@ -18,7 +18,7 @@ import analytics_service
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-__version__ = "2.0.1"
+__version__ = "2.0.2"
 
 UPLOAD_FOLDER = os.path.join(app.root_path, "static", "uploads", "receipts")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -427,12 +427,16 @@ def categories_page():
     user = get_current_user()
     user_id = user["id"]
     categories = database.get_categories(user_id=user_id)
-    total_budget = sum(c["monthly_budget"] for c in categories)
+    total_budget = database.get_user_monthly_budget(user_id=user_id)
+    explicit_budget = database.get_explicit_monthly_budget(user_id=user_id)
+    categories_sum = sum(c["monthly_budget"] for c in categories)
     total_spent = sum(c["current_month_spent"] for c in categories)
     return render_template(
         "categories.html",
         categories=categories,
         total_budget=round(total_budget, 2),
+        explicit_budget=round(explicit_budget, 2) if explicit_budget else None,
+        categories_sum=round(categories_sum, 2),
         total_spent=round(total_spent, 2),
         active_page="categories"
     )
@@ -1385,11 +1389,15 @@ def api_get_budget():
     user = get_current_user()
     user_id = user["id"]
     categories = database.get_categories(user_id=user_id)
-    total_budget = sum(c["monthly_budget"] for c in categories)
+    total_budget = database.get_user_monthly_budget(user_id=user_id)
+    explicit_budget = database.get_explicit_monthly_budget(user_id=user_id)
+    categories_sum = sum(c["monthly_budget"] for c in categories)
     total_spent = sum(c["current_month_spent"] for c in categories)
     return jsonify({
         "success": True,
         "total_budget": round(total_budget, 2),
+        "explicit_budget": round(explicit_budget, 2) if explicit_budget else None,
+        "categories_sum": round(categories_sum, 2),
         "total_spent": round(total_spent, 2),
         "categories": categories
     })
@@ -1399,29 +1407,40 @@ def api_get_budget():
 def api_update_budget():
     """
     Update monthly budget.
-    Supports either:
-      - 'category_budgets': dict { cat_id: budget } or list of { id, budget }
-      - 'total_budget': overall monthly budget amount distributed across categories
+    Supports:
+      - 'total_budget': overall monthly budget amount ceiling (can be any arbitrary amount)
+      - 'category_budgets': dict { cat_id: budget } or list of { id, budget } (optional)
+      - 'distribute_categories': boolean flag (true to auto-scale/distribute to categories)
     """
     user = get_current_user()
     user_id = user["id"]
     data = request.get_json() if request.is_json else request.form
     try:
-        if "category_budgets" in data:
-            category_budgets = data["category_budgets"]
-            database.update_monthly_budgets(category_budgets, user_id=user_id)
-        elif "total_budget" in data:
-            total_budget = float(data["total_budget"])
-            database.set_total_monthly_budget(total_budget, user_id=user_id)
-        else:
+        distribute = str(data.get("distribute_categories", "false")).lower() in ("true", "1", "yes")
+        has_total = "total_budget" in data and data["total_budget"] is not None and str(data["total_budget"]).strip() != ""
+        has_categories = "category_budgets" in data and data["category_budgets"] is not None
+
+        if not has_total and not has_categories:
             return jsonify({"success": False, "error": "Missing 'category_budgets' or 'total_budget'"}), 400
 
+        if has_total:
+            total_budget = max(0.0, float(data["total_budget"]))
+            database.set_user_monthly_budget(user_id=user_id, amount=total_budget)
+            if distribute:
+                database.set_total_monthly_budget(total_budget, user_id=user_id, distribute_to_categories=True)
+
+        if has_categories and not distribute:
+            category_budgets = data["category_budgets"]
+            database.update_monthly_budgets(category_budgets, user_id=user_id)
+
         categories = database.get_categories(user_id=user_id)
-        new_total = sum(c["monthly_budget"] for c in categories)
+        current_total = database.get_user_monthly_budget(user_id=user_id)
+        explicit_budget = database.get_explicit_monthly_budget(user_id=user_id)
         return jsonify({
             "success": True,
             "message": "Monthly budget updated successfully!",
-            "total_budget": round(new_total, 2),
+            "total_budget": round(current_total, 2),
+            "explicit_budget": round(explicit_budget, 2) if explicit_budget else None,
             "categories": categories
         })
     except Exception as e:

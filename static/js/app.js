@@ -637,7 +637,7 @@ function closeCategoryModal() {
 function editCategory(cat) {
     document.getElementById("categoryId").value = cat.id;
     document.getElementById("catName").value = cat.name;
-    document.getElementById("catBudget").value = cat.monthly_budget;
+    document.getElementById("catBudget").value = (cat.monthly_budget && Number(cat.monthly_budget) > 0) ? cat.monthly_budget : "";
     selectIcon(cat.icon);
     selectColor(cat.color);
     document.getElementById("catModalTitle").textContent = "Edit Category";
@@ -830,14 +830,18 @@ async function openEditMonthlyBudgetModal(focusCatId = null) {
 
         cachedBudgetCategories = data.categories || [];
         const sym = getCurrencySymbol();
-        const total = data.total_budget || 0;
+        const total = Number(data.total_budget || 0);
 
-        document.getElementById("modalTargetBudgetInput").value = total.toFixed(2);
+        document.getElementById("modalTargetBudgetInput").value = total > 0 ? total.toFixed(2) : "";
+        document.getElementById("modalFooterTotal").textContent = `${sym}${total.toFixed(2)}`;
         
         const listContainer = document.getElementById("modalCategoryBudgetList");
         listContainer.innerHTML = "";
 
+        let catSum = 0;
         cachedBudgetCategories.forEach(cat => {
+            const bVal = Number(cat.monthly_budget || 0);
+            catSum += bVal;
             const row = document.createElement("div");
             row.id = `cat-budget-row-${cat.id}`;
             row.className = "py-2.5 flex items-center justify-between gap-3 group transition-colors rounded-xl px-2 hover:bg-slate-50 dark:hover:bg-slate-800/40";
@@ -853,19 +857,20 @@ async function openEditMonthlyBudgetModal(focusCatId = null) {
                     </div>
                 </div>
                 <div class="flex items-center space-x-2">
-                    <span id="pct-badge-${cat.id}" class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 w-14 text-center">
+                    <span id="pct-badge-${cat.id}" class="text-[10px] font-semibold px-2 py-0.5 rounded-full w-16 text-center transition-all">
                         0%
                     </span>
                     <div class="relative w-28 sm:w-32">
                         <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">${sym}</span>
-                        <input type="number" step="5" min="0" data-cat-id="${cat.id}" value="${Number(cat.monthly_budget || 0).toFixed(2)}" class="modal-cat-budget-input w-full pl-6 pr-2 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-right text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 outline-none transition-all" oninput="onCategoryBudgetInputChange()">
+                        <input type="number" step="5" min="0" data-cat-id="${cat.id}" placeholder="0.00" value="${bVal > 0 ? bVal.toFixed(2) : '0.00'}" class="modal-cat-budget-input w-full pl-6 pr-2 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-right text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 outline-none transition-all" oninput="onCategoryBudgetInputChange()">
                     </div>
                 </div>
             `;
             listContainer.appendChild(row);
         });
 
-        recalculateModalTotalBudget();
+        document.getElementById("modalLiveTotalSum").textContent = `${sym}${catSum.toFixed(2)}`;
+        updateModalCategoryBadges();
         modal.classList.remove("hidden");
 
         if (focusCatId) {
@@ -891,30 +896,71 @@ function closeMonthlyBudgetModal() {
     if (modal) modal.classList.add("hidden");
 }
 
-function onCategoryBudgetInputChange() {
-    const inputs = document.querySelectorAll(".modal-cat-budget-input");
-    let total = 0;
-    inputs.forEach(inp => {
-        total += parseFloat(inp.value || 0);
-    });
-
+function onTargetBudgetInputChange() {
     const sym = getCurrencySymbol();
-    document.getElementById("modalLiveTotalSum").textContent = `${sym}${total.toFixed(2)}`;
-    document.getElementById("modalFooterTotal").textContent = `${sym}${total.toFixed(2)}`;
-    document.getElementById("modalTargetBudgetInput").value = total.toFixed(2);
+    const targetVal = parseFloat(document.getElementById("modalTargetBudgetInput").value || 0);
+    document.getElementById("modalFooterTotal").textContent = `${sym}${targetVal.toFixed(2)}`;
+    updateModalCategoryBadges();
+}
 
-    // Update percentage badges
+function onCategoryBudgetInputChange() {
+    const sym = getCurrencySymbol();
+    const inputs = document.querySelectorAll(".modal-cat-budget-input");
+    let catSum = 0;
+    inputs.forEach(inp => {
+        catSum += parseFloat(inp.value || 0);
+    });
+    document.getElementById("modalLiveTotalSum").textContent = `${sym}${catSum.toFixed(2)}`;
+
+    // If overall target budget input is completely empty or 0, initialize it to catSum
+    const targetInp = document.getElementById("modalTargetBudgetInput");
+    if (!targetInp.value || parseFloat(targetInp.value) === 0) {
+        targetInp.value = catSum.toFixed(2);
+        document.getElementById("modalFooterTotal").textContent = `${sym}${catSum.toFixed(2)}`;
+    }
+    updateModalCategoryBadges();
+}
+
+function updateModalCategoryBadges() {
+    const targetVal = parseFloat(document.getElementById("modalTargetBudgetInput").value || 0);
+    const inputs = document.querySelectorAll(".modal-cat-budget-input");
     inputs.forEach(inp => {
         const catId = inp.dataset.catId;
         const val = parseFloat(inp.value || 0);
-        const pct = total > 0 ? (val / total * 100).toFixed(1) : 0;
         const badge = document.getElementById(`pct-badge-${catId}`);
-        if (badge) badge.textContent = `${pct}%`;
+        if (!badge) return;
+        if (val <= 0) {
+            badge.textContent = "Uncapped";
+            badge.className = "text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 w-16 text-center";
+        } else if (targetVal > 0) {
+            const pct = Math.round((val / targetVal) * 100);
+            badge.textContent = `${pct}%`;
+            badge.className = "text-[10px] font-semibold px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 border border-teal-200/50 dark:border-teal-800/50 w-16 text-center";
+        } else {
+            badge.textContent = "Limit";
+            badge.className = "text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 w-16 text-center";
+        }
     });
 }
 
 function recalculateModalTotalBudget() {
     onCategoryBudgetInputChange();
+}
+
+function uncapAllCategoryBudgets() {
+    const inputs = document.querySelectorAll(".modal-cat-budget-input");
+    inputs.forEach(inp => inp.value = "0.00");
+    const sym = getCurrencySymbol();
+    document.getElementById("modalLiveTotalSum").textContent = `${sym}0.00`;
+    updateModalCategoryBadges();
+}
+
+function matchCategorySum() {
+    const inputs = document.querySelectorAll(".modal-cat-budget-input");
+    let catSum = 0;
+    inputs.forEach(inp => catSum += parseFloat(inp.value || 0));
+    document.getElementById("modalTargetBudgetInput").value = catSum.toFixed(2);
+    onTargetBudgetInputChange();
 }
 
 function distributeBudgetProportionally() {
@@ -935,7 +981,11 @@ function distributeBudgetProportionally() {
         distributeBudgetEvenly();
         return;
     }
-    recalculateModalTotalBudget();
+    const sym = getCurrencySymbol();
+    let catSum = 0;
+    inputs.forEach(inp => catSum += parseFloat(inp.value || 0));
+    document.getElementById("modalLiveTotalSum").textContent = `${sym}${catSum.toFixed(2)}`;
+    updateModalCategoryBadges();
 }
 
 function distributeBudgetEvenly() {
@@ -947,7 +997,9 @@ function distributeBudgetEvenly() {
 
     const share = (targetVal / inputs.length).toFixed(2);
     inputs.forEach(inp => inp.value = share);
-    recalculateModalTotalBudget();
+    const sym = getCurrencySymbol();
+    document.getElementById("modalLiveTotalSum").textContent = `${sym}${targetVal.toFixed(2)}`;
+    updateModalCategoryBadges();
 }
 
 async function handleSaveMonthlyBudget() {
@@ -955,6 +1007,7 @@ async function handleSaveMonthlyBudget() {
     saveBtn.disabled = true;
     document.getElementById("saveBudgetBtnText").textContent = "Saving...";
 
+    const targetVal = parseFloat(document.getElementById("modalTargetBudgetInput").value || 0);
     const inputs = document.querySelectorAll(".modal-cat-budget-input");
     const categoryBudgets = {};
     inputs.forEach(inp => {
@@ -965,7 +1018,10 @@ async function handleSaveMonthlyBudget() {
         const res = await fetch("/api/budget", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ category_budgets: categoryBudgets })
+            body: JSON.stringify({
+                total_budget: targetVal,
+                category_budgets: categoryBudgets
+            })
         });
 
         const data = await res.json();
